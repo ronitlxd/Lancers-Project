@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}My Calendar - Lancer Injury Tracking{% endblock %}
+{% block title %}Schedule — LancersPulse{% endblock %}
 
 {% block content %}
 <div class="container-fluid pb-5 player-calendar-page">
@@ -11,12 +11,12 @@
     <div class="col-lg-9">
       <div class="card">
         <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <h5 class="mb-0"><i class="bi bi-calendar3 me-2"></i>My Calendar</h5>
+          <h5 class="mb-0"><i class="bi bi-calendar3 me-2"></i>Schedule</h5>
           <div class="d-flex align-items-center gap-2 small">
             <span class="legend-dot" style="background:#0b76ef;"></span><span>Team Event</span>
             <span class="legend-dot ms-2" style="background:#10b981;"></span><span>Appt (Confirmed)</span>
             <span class="legend-dot ms-2" style="background:#f59e0b;"></span><span>Appt (Pending)</span>
-            <span class="legend-dot ms-2" style="background:#ef4444;"></span><span>Injury</span>
+            <span class="legend-dot ms-2" style="background:#8b5cf6;"></span><span>Follow-up</span>
           </div>
         </div>
         <div class="card-body">
@@ -34,7 +34,7 @@
         <div class="card-body p-2">
           {% for item in upcoming %}
             <div class="d-flex align-items-start gap-2 py-2 {% if not forloop.last %}border-bottom{% endif %}">
-              <i class="bi {% if item.kind == 'appointment' %}bi-calendar-check text-success{% else %}bi-calendar-event text-primary{% endif %}"></i>
+              <i class="bi {% if item.kind == 'appointment' %}bi-calendar-check text-success{% elif item.kind == 'follow_up' %}bi-clipboard-pulse text-purple{% else %}bi-calendar-event text-primary{% endif %}"></i>
               <div class="flex-grow-1">
                 <div class="small fw-semibold">{{ item.title|truncatechars:36 }}</div>
                 <div class="text-muted" style="font-size: 11px;">
@@ -43,7 +43,10 @@
               </div>
             </div>
           {% empty %}
-            <p class="text-muted small text-center mb-0 py-3">Nothing scheduled.</p>
+            <div class="text-center py-3">
+              <i class="bi bi-calendar-week text-muted d-block mb-1" style="font-size:1.5rem;"></i>
+              <p class="text-muted small mb-0">No upcoming items.</p>
+            </div>
           {% endfor %}
         </div>
       </div>
@@ -109,29 +112,9 @@
   </div>
 </div>
 
-{# ===== Mobile bottom nav (mirrors dashboard) ===== #}
-<nav class="mobile-bottom-nav d-md-none" aria-label="Player navigation">
-  <a href="{% url 'tracking:player_dashboard' %}" class="mbn-btn text-decoration-none">
-    <i class="bi bi-house-door"></i><span>Home</span>
-    {% if unread_notifications %}<span class="mbn-badge">{{ unread_notifications }}</span>{% endif %}
-  </a>
-  <a href="{% url 'tracking:player_dashboard' %}?tab=injuries" class="mbn-btn text-decoration-none">
-    <i class="bi bi-bandaid"></i><span>Injuries</span>
-  </a>
-  <a href="{% url 'player_calendar' %}" class="mbn-btn active text-decoration-none">
-    <i class="bi bi-calendar3"></i><span>Calendar</span>
-  </a>
-  <a href="{% url 'tracking:player_dashboard' %}?tab=events" class="mbn-btn text-decoration-none">
-    <i class="bi bi-calendar-event"></i><span>Events</span>
-  </a>
-  <a href="{% url 'profile' %}" class="mbn-btn text-decoration-none">
-    <i class="bi bi-person"></i><span>Profile</span>
-  </a>
-</nav>
-
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css">
 <style>
-  .player-calendar-page { padding-bottom: 80px; }
+  .player-calendar-page { padding-bottom: 1rem; }
   .legend-dot {
     display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   }
@@ -139,31 +122,7 @@
   .fc .fc-day-today { background-color: rgba(11, 118, 239, 0.10) !important; }
   .fc .fc-event { cursor: pointer; }
 
-  /* mobile bottom nav (copy of dashboard styles, kept here for stand-alone page) */
-  .mobile-bottom-nav {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    height: 60px; background: #fff;
-    border-top: 1px solid #e2e8f0;
-    display: flex; justify-content: space-around; align-items: stretch;
-    z-index: 1040; padding: 4px 0;
-  }
-  .mbn-btn {
-    flex: 1; background: none; border: 0;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #64748b; font-size: 11px; gap: 2px;
-    min-height: 44px; position: relative;
-  }
-  .mbn-btn i { font-size: 20px; }
-  .mbn-btn.active { color: #0b76ef; font-weight: 600; }
-  .mbn-badge {
-    position: absolute; top: 4px; right: 28%;
-    background: #ef4444; color: #fff;
-    border-radius: 999px; font-size: 9px; padding: 1px 5px; line-height: 1.2;
-  }
-
   @media (max-width: 768px) {
-    nav.navbar { display: none !important; }
-    main.container-fluid { padding-top: 0.75rem !important; }
     #calendar { min-height: 500px; }
   }
 </style>
@@ -223,12 +182,11 @@
             <div><strong>Therapist:</strong> ${p.therapist || 'TBD'}</div>
             ${p.note ? '<div><strong>Note:</strong> ' + p.note + '</div>' : ''}
           `;
-        } else if (p.kind === 'injury') {
+        } else if (p.kind === 'follow_up') {
           html = `
             <div><strong>Date:</strong> ${when}</div>
-            <div><strong>Injury:</strong> ${p.injury_type || '—'}</div>
-            <div><strong>Body part:</strong> ${p.body_part || '—'}</div>
-            <div><strong>Status:</strong> ${p.status || '—'}</div>
+            <div><strong>Injury:</strong> ${p.body_part || '—'} — ${p.injury_type || '—'}</div>
+            <div class="mt-1 text-muted" style="font-size:11px;">Follow-up check-in with your therapist.</div>
           `;
         }
         bodyEl.innerHTML = html;

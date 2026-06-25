@@ -431,10 +431,13 @@ def player_calendar(request):
         preferred_date__gte=cutoff,
     ).select_related('therapist').order_by('preferred_date'))
 
-    player_injuries = list(InjuryRecord.objects.filter(
+    # Injuries are NOT shown on the player calendar — they appear in the dashboard instead
+    player_follow_ups = list(InjuryRecord.objects.filter(
         player=request.user,
-        injury_date__gte=cutoff,
-    ).select_related('injury_type', 'body_part').order_by('-injury_date'))
+        follow_up_required=True,
+        follow_up_date__isnull=False,
+        follow_up_date__gte=cutoff,
+    ).select_related('injury_type', 'body_part').order_by('follow_up_date'))
 
     events_data = []
     for ev in team_events:
@@ -466,17 +469,17 @@ def player_calendar(request):
                 'note': a.note or '',
             },
         })
-    for inj in player_injuries:
+    for fu in player_follow_ups:
         events_data.append({
-            'title': f"{inj.injury_type.name} — {inj.body_part.name}",
-            'start': inj.injury_date.isoformat(),
+            'title': f"Follow-up: {fu.body_part.name}",
+            'start': fu.follow_up_date.isoformat(),
             'allDay': True,
-            'color': '#ef4444',
+            'color': '#8b5cf6',
             'extendedProps': {
-                'kind': 'injury',
-                'injury_type': inj.injury_type.name,
-                'body_part': inj.body_part.name,
-                'status': inj.get_status_display(),
+                'kind': 'follow_up',
+                'body_part': fu.body_part.name,
+                'injury_type': fu.injury_type.name,
+                'status': fu.get_status_display(),
             },
         })
 
@@ -497,6 +500,14 @@ def player_calendar(request):
                 'title': f"Appointment — {a.get_status_display()}",
                 'kind': 'appointment',
                 'meta': a.get_preferred_time_slot_display(),
+            })
+    for fu in player_follow_ups:
+        if fu.follow_up_date >= today:
+            upcoming.append({
+                'when': fu.follow_up_date,
+                'title': f"Follow-up: {fu.body_part.name}",
+                'kind': 'follow_up',
+                'meta': fu.get_status_display(),
             })
     # Sort by datetime/date — coerce date to datetime for comparison
     from datetime import datetime as _dt

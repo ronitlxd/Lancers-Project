@@ -133,6 +133,71 @@ class InjuryRecord(models.Model):
     # END new fields                                                       #
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # NEW — Player self-report wizard additions                           #
+    # ------------------------------------------------------------------ #
+    CONTEXT_CHOICES = [
+        ('PRACTICE', 'Practice'),
+        ('GAME', 'Game'),
+        ('OTHER', 'Other'),
+    ]
+
+    COULD_CONTINUE_CHOICES = [
+        ('CONTINUED', 'Yes'),
+        ('STOPPED', 'No'),
+        ('STOPPED_LATER', 'Stopped later'),
+    ]
+
+    INJURY_NATURE_CHOICES = [
+        ('BRUISE', 'Bruise'),
+        ('TWIST', 'Twist'),
+        ('PULL', 'Pull'),
+        ('IMPACT', 'Impact'),
+        ('CUT', 'Cut'),
+        ('OTHER', 'Other'),
+    ]
+
+    context = models.CharField(
+        max_length=20,
+        choices=CONTEXT_CHOICES,
+        null=True,
+        blank=True,
+        help_text="What the player was doing when the injury occurred.",
+    )
+
+    could_continue = models.CharField(
+        max_length=20,
+        choices=COULD_CONTINUE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Whether the player was able to keep playing after the injury.",
+    )
+
+    pain_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0), MaxValueValidator(10)],
+        help_text="Self-reported pain level at time of reporting, 0 (none) to 10 (worst).",
+    )
+
+    injury_nature = models.CharField(
+        max_length=20,
+        choices=INJURY_NATURE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Player's own description of the type of injury (e.g. twist, bruise).",
+    )
+
+    photo = models.ImageField(
+        upload_to='injury_photos/',
+        null=True,
+        blank=True,
+        help_text="Optional photo of the injury, uploaded by the player.",
+    )
+    # ------------------------------------------------------------------ #
+    # END player self-report additions                                     #
+    # ------------------------------------------------------------------ #
+
     # Basic Information — unchanged from Team 13
     player = models.ForeignKey(User, on_delete=models.CASCADE, related_name='injuries')
     reported_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reported_injuries')

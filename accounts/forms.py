@@ -247,6 +247,12 @@ YEAR_OF_ELIGIBILITY_CHOICES = [
 ]
 
 
+class _TeamChoiceField(forms.ModelChoiceField):
+    """Team selector that shows only the team name, without the gender suffix."""
+    def label_from_instance(self, obj):
+        return obj.name
+
+
 class PlayerRegisterStep2Form(forms.ModelForm):
     """Step 2 of player registration: athletic identity only.
 
@@ -254,7 +260,7 @@ class PlayerRegisterStep2Form(forms.ModelForm):
     Those fields still exist on the PlayerProfile model (kept for data preservation)
     but are no longer surfaced in player-facing UI.
     """
-    team = forms.ModelChoiceField(
+    team = _TeamChoiceField(
         queryset=Team.objects.all(),
         required=True, empty_label="Select your team",
         widget=forms.Select(attrs={'class': 'form-control'}),

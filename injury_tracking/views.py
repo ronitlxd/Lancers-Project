@@ -19,7 +19,8 @@ from accounts.models import Notification
 from accounts.utils import notify
 from .forms import (
     InjuryReportForm, InjuryUpdateForm, InjuryFollowUpForm,
-    PlayerProfileForm, TeamRosterForm, InjurySearchForm, EventForm
+    PlayerProfileForm, TeamRosterForm, InjurySearchForm, EventForm,
+    PlayerInjuryReportForm,
 )
 from accounts.models import CustomUser, Team
 
@@ -416,19 +417,16 @@ def player_dashboard(request):
         preferred_date__gte=today,
     ).exclude(status='CANCELLED').select_related('therapist', 'team').order_by('preferred_date')
 
-    # Upcoming team events for Home + Events tab
-    upcoming_events = []
-    if getattr(user, 'team', None):
-        upcoming_events = Event.objects.filter(
-            team=user.team,
-            end_datetime__gte=timezone.now(),
-        ).order_by('start_datetime')[:10]
+    # Follow-up schedule: active/recovering injuries that have a follow-up date
+    follow_up_qs = current_injuries.filter(
+        follow_up_required=True,
+        follow_up_date__isnull=False,
+    )
+    upcoming_follow_ups = follow_up_qs.filter(follow_up_date__gte=today).order_by('follow_up_date')
+    overdue_follow_ups  = follow_up_qs.filter(follow_up_date__lt=today).order_by('follow_up_date')
 
-    # Notifications
-    unread_notifications = Notification.objects.filter(user=user, is_read=False).count()
-
-    # Body parts for the manual selector in the report-injury wizard
-    body_parts = BodyPart.objects.all().order_by('name')
+    # First upcoming appointment (for the hero strip)
+    next_appointment = upcoming_appointments.first()
 
     # ---------- Clearance status widget ----------
     total_count = all_injuries.count()
@@ -513,14 +511,16 @@ def player_dashboard(request):
         'avg_recovery_time': avg_recovery_time,
         # New tabs
         'upcoming_appointments': upcoming_appointments,
-        'upcoming_events': upcoming_events,
-        'unread_notifications': unread_notifications,
-        'body_parts': body_parts,
         # Clearance + season stats
         'clearance': clearance,
         'total_missed_games': total_missed_games,
         'total_missed_practices': total_missed_practices,
         'active_recovery_days': active_recovery_days,
+        # Follow-ups
+        'upcoming_follow_ups': upcoming_follow_ups,
+        'overdue_follow_ups': overdue_follow_ups,
+        # Next appointment hero strip
+        'next_appointment': next_appointment,
     }
 
     return render(request, 'accounts/player_dashboard.html', context)
@@ -621,59 +621,39 @@ def _default_severity():
 
 @login_required
 def player_report_injury_submit(request):
-    """Player self-reports an injury (3-step wizard posts here at the end)."""
+    """Player self-reports an injury via the 2-step (Report -> Review) wizard."""
     if request.user.role != 'PLAYER':
         messages.error(request, "Only players can self-report injuries.")
         return redirect('dashboard')
+
+    if request.method == 'GET':
+        form = PlayerInjuryReportForm()
+        return render(request, 'injury_tracking/player_report_injury.html', {
+            'form': form,
+        })
+
     if request.method != 'POST':
         return redirect('tracking:player_dashboard')
 
-    body_part_id = request.POST.get('body_part_id')
-    body_part_name = (request.POST.get('body_part_name') or '').strip()
-    injury_date_str = request.POST.get('injury_date')
-    description = (request.POST.get('description') or '').strip()
-    context_type = request.POST.get('context_type', 'Other')
-    # contact_type: 'CONTACT', 'NON_CONTACT', or '' (Not Sure -> blank, therapist fills later)
-    contact_type = (request.POST.get('contact_type') or '').strip()
+    form = PlayerInjuryReportForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for field_errors in form.errors.values():
+            for error in field_errors:
+                messages.error(request, error)
+        return render(request, 'injury_tracking/player_report_injury.html', {
+            'form': form,
+        })
 
-    # Resolve body part: prefer explicit id, fall back to name match (from SVG click).
-    body_part = None
-    if body_part_id:
-        body_part = BodyPart.objects.filter(id=body_part_id).first()
-    if not body_part and body_part_name:
-        body_part = BodyPart.objects.filter(name__iexact=body_part_name).first()
-        if not body_part:
-            body_part = BodyPart.objects.create(name=body_part_name)
+    injury = form.save(commit=False)
+    injury.player = request.user
+    injury.reported_by = request.user
+    injury.injury_type = _default_injury_type()
+    injury.severity = _default_severity()
+    injury.status = 'ACTIVE'
+    injury.treatment = 'REST'
+    injury.self_reported = True
+    injury.save()
 
-    if not body_part or not injury_date_str or not description:
-        messages.error(request, "Please complete all required fields before submitting.")
-        return redirect('tracking:player_dashboard')
-
-    try:
-        injury_date = datetime.strptime(injury_date_str, '%Y-%m-%d').date()
-    except (ValueError, TypeError):
-        messages.error(request, "Invalid injury date.")
-        return redirect('tracking:player_dashboard')
-
-    # Only set contact_type when player explicitly chose Contact/Non-Contact.
-    # 'Not Sure' (blank) leaves the model default in place for the therapist to set.
-    extra_kwargs = {}
-    if contact_type in ('CONTACT', 'NON_CONTACT'):
-        extra_kwargs['contact_type'] = contact_type
-
-    InjuryRecord.objects.create(
-        player=request.user,
-        reported_by=request.user,
-        injury_date=injury_date,
-        injury_type=_default_injury_type(),
-        body_part=body_part,
-        severity=_default_severity(),
-        status='ACTIVE',
-        description=f"{description}\n\nContext: {context_type}",
-        treatment='REST',
-        self_reported=True,
-        **extra_kwargs,
-    )
     messages.success(
         request,
         'Injury reported successfully. A therapist will review your report shortly.',

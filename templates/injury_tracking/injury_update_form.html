@@ -38,7 +38,7 @@
           </h5>
         </div>
         <div class="card-body">
-          <form method="post" novalidate>
+          <form method="post" enctype="multipart/form-data" novalidate>
             {% csrf_token %}
             
             <!-- Status and Recovery -->
@@ -144,6 +144,83 @@
                   <div class="invalid-feedback d-block">
                     {% for error in form.symptoms.errors %}{{ error }}{% endfor %}
                   </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- Player-Reported Details -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <h6 class="text-primary mb-3">
+                  <i class="bi bi-person-lines-fill me-2"></i>Player-Reported Details
+                </h6>
+                <p class="form-text mt-n2 mb-3">What the player told us when they reported this injury. Review and correct if needed.</p>
+              </div>
+              <div class="col-md-4 mb-3">
+                <label for="{{ form.context.id_for_label }}" class="form-label">Context</label>
+                {{ form.context }}
+                {% if form.context.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.context.errors %}{{ error }}{% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.context.help_text %}
+                  <div class="form-text">{{ form.context.help_text }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-4 mb-3">
+                <label for="{{ form.could_continue.id_for_label }}" class="form-label">Could Continue Playing?</label>
+                {{ form.could_continue }}
+                {% if form.could_continue.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.could_continue.errors %}{{ error }}{% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.could_continue.help_text %}
+                  <div class="form-text">{{ form.could_continue.help_text }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-4 mb-3">
+                <label for="{{ form.pain_level.id_for_label }}" class="form-label">Pain Level (0-10)</label>
+                {{ form.pain_level }}
+                {% if form.pain_level.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.pain_level.errors %}{{ error }}{% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.pain_level.help_text %}
+                  <div class="form-text">{{ form.pain_level.help_text }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.injury_nature.id_for_label }}" class="form-label">Nature of Injury</label>
+                {{ form.injury_nature }}
+                {% if form.injury_nature.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.injury_nature.errors %}{{ error }}{% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.injury_nature.help_text %}
+                  <div class="form-text">{{ form.injury_nature.help_text }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <label for="{{ form.photo.id_for_label }}" class="form-label">Photo</label>
+                {% if object.photo %}
+                  <div class="mb-2">
+                    <a href="{{ object.photo.url }}" target="_blank">
+                      <img src="{{ object.photo.url }}" alt="Injury photo" style="max-width:140px;max-height:140px;border-radius:8px;border:1px solid #e2e8f0;">
+                    </a>
+                  </div>
+                {% endif %}
+                {{ form.photo }}
+                {% if form.photo.errors %}
+                  <div class="invalid-feedback d-block">
+                    {% for error in form.photo.errors %}{{ error }}{% endfor %}
+                  </div>
+                {% endif %}
+                {% if form.photo.help_text %}
+                  <div class="form-text">{{ form.photo.help_text }}</div>
                 {% endif %}
               </div>
             </div>

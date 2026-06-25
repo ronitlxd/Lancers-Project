@@ -32,7 +32,7 @@ class InjuryRecordAdmin(admin.ModelAdmin):
     list_filter = [
         'status', 'severity', 'injury_type', 'body_part', 
         'requires_surgery', 'medical_clearance', 'is_confidential',
-        'injury_date', 'reported_date'
+        'injury_date', 'reported_date', 'self_reported', 'context',
     ]
     search_fields = [
         'player__first_name', 'player__last_name', 'player__username',
@@ -48,6 +48,12 @@ class InjuryRecordAdmin(admin.ModelAdmin):
         }),
         ('Injury Details', {
             'fields': ('injury_type', 'body_part', 'severity', 'status', 'description', 'symptoms')
+        }),
+        ('Player Self-Report Details', {
+            'fields': (
+                'context', 'could_continue', 'pain_level', 'injury_nature', 'photo',
+            ),
+            'description': 'Fields captured directly from the player when self-reporting (Report -> Review wizard).',
         }),
         ('Treatment', {
             'fields': ('treatment', 'treatment_notes', 'requires_surgery', 'surgery_date')

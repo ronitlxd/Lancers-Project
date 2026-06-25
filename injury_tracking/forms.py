@@ -9,6 +9,7 @@ Everything else is unchanged from Team 13.
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from .models import (
     InjuryRecord, InjuryType, BodyPart, InjurySeverity,
     InjuryFollowUp, TeamRoster, Event
@@ -28,6 +29,9 @@ class InjuryReportForm(forms.ModelForm):
             # --- Team 12 addition ---
             'contact_type',
             # ------------------------
+            # --- Player self-report fields (optional for doctor entry too) ---
+            'context', 'could_continue', 'pain_level', 'injury_nature', 'photo',
+            # -------------------------------------------------------------------
             'description', 'symptoms',
             'treatment', 'treatment_notes',
             'estimated_recovery_time',
@@ -54,6 +58,13 @@ class InjuryReportForm(forms.ModelForm):
             'missed_games': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
             'missed_practices': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
             # ---
+            # Player self-report fields
+            'context': forms.Select(attrs={'class': 'form-control'}),
+            'could_continue': forms.Select(attrs={'class': 'form-control'}),
+            'pain_level': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'max': 10}),
+            'injury_nature': forms.Select(attrs={'class': 'form-control'}),
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            # ---
             'estimated_recovery_time': forms.NumberInput(attrs={'class': 'form-control'}),
             'requires_surgery': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'follow_up_required': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
@@ -73,6 +84,14 @@ class InjuryReportForm(forms.ModelForm):
         )
         self.fields['missed_games'].help_text = "Leave blank if unknown at time of reporting — update later."
         self.fields['missed_practices'].help_text = "Leave blank if unknown at time of reporting — update later."
+
+        # Player self-report fields — optional here; usually filled in by the
+        # player's own report, but a doctor can set/correct them directly.
+        self.fields['context'].help_text = "What the player was doing when the injury occurred."
+        self.fields['could_continue'].help_text = "Whether the player was able to keep playing after the injury."
+        self.fields['pain_level'].help_text = "Player's self-reported pain level, 0 (none) to 10 (worst)."
+        self.fields['injury_nature'].help_text = "Player's own description of the type of injury (e.g. twist, bruise)."
+        self.fields['photo'].help_text = "Optional photo of the injury."
 
         # ── Player queryset logic (unchanged from Team 13) ─────────────────
         authorized_teams = None
@@ -166,6 +185,9 @@ class InjuryUpdateForm(forms.ModelForm):
             'contact_type',
             'missed_games', 'missed_practices',
             # -------------------------
+            # --- Player self-report fields (visible + editable on review) ---
+            'context', 'could_continue', 'pain_level', 'injury_nature', 'photo',
+            # -------------------------------------------------------------------
             'estimated_recovery_time', 'actual_recovery_time', 'return_to_play_date',
             'medical_clearance', 'clearance_date',
             'requires_surgery', 'surgery_date',
@@ -182,6 +204,13 @@ class InjuryUpdateForm(forms.ModelForm):
             'contact_type': forms.Select(attrs={'class': 'form-control'}),
             'missed_games': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
             'missed_practices': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            # ---
+            # Player self-report fields
+            'context': forms.Select(attrs={'class': 'form-control'}),
+            'could_continue': forms.Select(attrs={'class': 'form-control'}),
+            'pain_level': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'max': 10}),
+            'injury_nature': forms.Select(attrs={'class': 'form-control'}),
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
             # ---
             'estimated_recovery_time': forms.NumberInput(attrs={'class': 'form-control'}),
             'actual_recovery_time': forms.NumberInput(attrs={'class': 'form-control'}),
@@ -212,6 +241,12 @@ class InjuryUpdateForm(forms.ModelForm):
             'Actual recovery time in days '
             '(calculated automatically when status is set to RECOVERED).'
         )
+        self.fields['context'].help_text = "What the player was doing when the injury occurred."
+        self.fields['could_continue'].help_text = "Whether the player was able to keep playing after the injury."
+        self.fields['pain_level'].help_text = "Player's self-reported pain level, 0 (none) to 10 (worst)."
+        self.fields['injury_nature'].help_text = "Player's own description of the type of injury (e.g. twist, bruise)."
+        self.fields['photo'].help_text = "Optional photo of the injury. Upload a new one to replace it."
+
 
 
 class InjuryFollowUpForm(forms.ModelForm):
@@ -350,3 +385,69 @@ class EventForm(forms.ModelForm):
             elif user.team:
                 from accounts.models import Team
                 self.fields['team'].queryset = Team.objects.filter(id=user.team.id)
+
+
+class PlayerInjuryReportForm(forms.ModelForm):
+    """
+    Player self-report form (2-step wizard: Report -> Review).
+
+    Deliberately excludes clinical fields (injury_type, severity, treatment) —
+    those are placeholder-defaulted at creation time and confirmed by the
+    therapist later. The player only reports what they themselves observed.
+    """
+
+    class Meta:
+        model = InjuryRecord
+        fields = [
+            'body_part', 'injury_date', 'description',
+            'context', 'contact_type', 'could_continue',
+            'pain_level', 'injury_nature', 'photo',
+        ]
+        widgets = {
+            'body_part': forms.Select(attrs={'class': 'form-select'}),
+            'injury_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'description': forms.Textarea(attrs={
+                'rows': 4, 'class': 'form-control', 'maxlength': 500,
+                'placeholder': 'Describe what happened...',
+            }),
+            'context': forms.RadioSelect,
+            'contact_type': forms.RadioSelect,
+            'could_continue': forms.RadioSelect,
+            'pain_level': forms.NumberInput(attrs={
+                'type': 'range', 'class': 'form-range', 'min': 0, 'max': 10, 'step': 1,
+            }),
+            'injury_nature': forms.RadioSelect,
+            'photo': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['body_part'].queryset = BodyPart.objects.all().order_by('name')
+        self.fields['body_part'].empty_label = "Select where it hurts..."
+        self.fields['body_part'].required = True
+        self.fields['injury_date'].required = True
+        self.fields['injury_date'].widget.attrs['max'] = timezone.localdate().isoformat()
+        self.fields['description'].required = True
+        self.fields['description'].help_text = (
+            "Add at least a sentence so your therapist understands the situation."
+        )
+        self.fields['context'].required = True
+        self.fields['contact_type'].required = False
+        self.fields['could_continue'].required = False
+        self.fields['pain_level'].required = False
+        self.fields['injury_nature'].required = False
+        self.fields['photo'].required = False
+
+    def clean_injury_date(self):
+        injury_date = self.cleaned_data.get('injury_date')
+        if injury_date and injury_date > timezone.localdate():
+            raise forms.ValidationError("Injury date cannot be in the future.")
+        return injury_date
+
+    def clean_description(self):
+        description = (self.cleaned_data.get('description') or '').strip()
+        if len(description) < 10:
+            raise forms.ValidationError(
+                "Please add a bit more detail (at least 10 characters) so your therapist understands the situation."
+            )
+        return description

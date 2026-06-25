@@ -16,13 +16,17 @@
                 <i class="bi bi-clipboard-data"></i>
               </div>
               <div>
-                <h1 class="card-title mb-1">Injury Records</h1>
-                <p class="text-muted mb-0">Comprehensive injury tracking and management</p>
+                <h1 class="card-title mb-1">{% if user.role == 'PLAYER' %}My Injuries{% else %}Injury Records{% endif %}</h1>
+                <p class="text-muted mb-0">{% if user.role == 'PLAYER' %}Your complete injury history{% else %}Comprehensive injury tracking and management{% endif %}</p>
               </div>
             </div>
             {% if user.role == 'DOCTOR' or user.role == 'ADMIN' %}
             <a href="{% url 'tracking:injury_create' %}" class="btn btn-primary">
               <i class="bi bi-plus-circle me-2"></i>Report New Injury
+            </a>
+            {% elif user.role == 'PLAYER' %}
+            <a href="{% url 'tracking:player_report_injury_submit' %}" class="btn btn-primary">
+              <i class="bi bi-plus-circle me-2"></i>Report Injury
             </a>
             {% endif %}
           </div>
@@ -37,8 +41,8 @@
       <div class="alert alert-info d-flex align-items-center">
         <i class="bi bi-info-circle me-2 fs-4"></i>
         <div>
-          <strong>Complete Injury History:</strong> This list includes <strong>ALL injuries</strong> regardless of status 
-          (Active, Recovering, Recovered, Chronic). Recovered injuries are preserved for comprehensive tracking and 
+          <strong>Complete Injury History:</strong> This list includes <strong>ALL injuries</strong> regardless of status
+          (Active, Recovering, Recovered, Chronic). Recovered injuries are preserved for comprehensive tracking and
           end-of-year analysis. Use the status filter below to view specific injury statuses.
         </div>
       </div>
@@ -56,10 +60,12 @@
         </div>
         <div class="card-body">
           <form method="get" class="row g-3">
+            {% if user.role != 'PLAYER' %}
             <div class="col-md-3">
               <label for="{{ search_form.player.id_for_label }}" class="form-label">Player</label>
               {{ search_form.player }}
             </div>
+            {% endif %}
             <div class="col-md-3">
               <label for="{{ search_form.injury_type.id_for_label }}" class="form-label">Injury Type</label>
               {{ search_form.injury_type }}
@@ -186,14 +192,14 @@
                           <i class="bi bi-pencil"></i>
                         </a>
                         {% if injury.status != 'RECOVERED' %}
-                        <button type="button" class="btn btn-outline-success btn-sm" 
-                                onclick="markAsRecovered({{ injury.pk }}, '{{ injury.player.get_full_name }}')" 
+                        <button type="button" class="btn btn-outline-success btn-sm"
+                                onclick="markAsRecovered({{ injury.pk }}, '{{ injury.player.get_full_name }}')"
                                 title="Mark as Recovered">
                           <i class="bi bi-check-circle"></i>
                         </button>
                         {% endif %}
-                        <button type="button" class="btn btn-outline-danger btn-sm" 
-                                onclick="deleteInjury({{ injury.pk }}, '{{ injury.player.get_full_name }}')" 
+                        <button type="button" class="btn btn-outline-danger btn-sm"
+                                onclick="deleteInjury({{ injury.pk }}, '{{ injury.player.get_full_name }}')"
                                 title="Delete">
                           <i class="bi bi-trash"></i>
                         </button>
@@ -269,7 +275,7 @@
     // Get current search parameters
     const params = new URLSearchParams(window.location.search);
     params.set('export', 'csv');
-    
+
     // Create download link
     const exportUrl = `${window.location.pathname}?${params.toString()}`;
     window.open(exportUrl, '_blank');
@@ -294,14 +300,14 @@
     // Try to get CSRF token from cookie (Django's default)
     const token = getCookie('csrftoken');
     if (token) return token;
-    
+
     // Fallback: look for token in hidden input or meta tag
     const tokenInput = document.querySelector('[name=csrfmiddlewaretoken]');
     if (tokenInput) return tokenInput.value;
-    
+
     const metaToken = document.querySelector('meta[name=csrf-token]');
     if (metaToken) return metaToken.content;
-    
+
     return null;
   }
 
@@ -311,7 +317,7 @@
       form.method = 'POST';
       form.action = `/tracking/injuries/${injuryId}/recover/`;
       form.style.display = 'none';
-      
+
       const csrfToken = getCsrfToken();
       if (csrfToken) {
         const csrfInput = document.createElement('input');
@@ -320,7 +326,7 @@
         csrfInput.value = csrfToken;
         form.appendChild(csrfInput);
       }
-      
+
       document.body.appendChild(form);
       form.submit();
     }
@@ -332,7 +338,7 @@
       form.method = 'POST';
       form.action = `/tracking/injuries/${injuryId}/delete/`;
       form.style.display = 'none';
-      
+
       const csrfToken = getCsrfToken();
       if (csrfToken) {
         const csrfInput = document.createElement('input');
@@ -341,7 +347,7 @@
         csrfInput.value = csrfToken;
         form.appendChild(csrfInput);
       }
-      
+
       document.body.appendChild(form);
       form.submit();
     }
@@ -355,27 +361,27 @@
     font-size: 0.875rem;
     font-weight: 500;
   }
-  
+
   .status-active {
     background-color: #fef3c7;
     color: #92400e;
   }
-  
+
   .status-recovering {
     background-color: #dbeafe;
     color: #1e40af;
   }
-  
+
   .status-recovered {
     background-color: #d1fae5;
     color: #065f46;
   }
-  
+
   .status-chronic {
     background-color: #fee2e2;
     color: #991b1b;
   }
-  
+
   .avatar-sm {
     width: 40px;
     height: 40px;

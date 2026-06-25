@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}My Profile - Lancer Injury Tracking{% endblock %}
+{% block title %}My Profile — LancersPulse{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-3">
@@ -9,9 +9,19 @@
     <div class="col-md-10 col-lg-8">
 
       <div class="card mb-3">
-        <div class="card-header d-flex align-items-center justify-content-between">
-          <h4 class="mb-0"><i class="bi bi-person-circle me-2"></i>My Profile</h4>
-          <span class="badge bg-info">Player</span>
+        <div class="card-body">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+              <div class="widget-icon primary me-3">
+                <i class="bi bi-person-fill"></i>
+              </div>
+              <div>
+                <h1 class="card-title mb-1">My Profile</h1>
+                <p class="text-muted mb-0">Manage your personal and sport details</p>
+              </div>
+            </div>
+            <span class="badge bg-info">Player</span>
+          </div>
         </div>
       </div>
 
@@ -89,11 +99,6 @@
           </div>
           <div class="card-body">
             <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label">{{ sport_form.sport_gender_category.label }}</label>
-                {{ sport_form.sport_gender_category }}
-                {{ sport_form.sport_gender_category.errors }}
-              </div>
               <div class="col-md-6">
                 <label class="form-label">{{ sport_form.team.label }}</label>
                 {{ sport_form.team }}

@@ -72,6 +72,36 @@
               {% endif %}
             </div>
           </div>
+
+          {% if injury.self_reported %}
+          <hr>
+          <h6 class="text-muted">Reported by Player</h6>
+          <div class="row">
+            <div class="col-md-6">
+              {% if injury.context %}
+                <p><strong>Context:</strong> {{ injury.get_context_display }}</p>
+              {% endif %}
+              {% if injury.could_continue %}
+                <p><strong>Could keep playing:</strong> {{ injury.get_could_continue_display }}</p>
+              {% endif %}
+              {% if injury.pain_level != None %}
+                <p><strong>Pain level (self-reported):</strong> {{ injury.pain_level }} / 10</p>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              {% if injury.injury_nature %}
+                <p><strong>Nature of injury (player's words):</strong> {{ injury.get_injury_nature_display }}</p>
+              {% endif %}
+              {% if injury.photo %}
+                <p><strong>Photo:</strong><br>
+                  <a href="{{ injury.photo.url }}" target="_blank">
+                    <img src="{{ injury.photo.url }}" alt="Injury photo" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid #e2e8f0;">
+                  </a>
+                </p>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
         </div>
       </div>
 
@@ -279,9 +309,15 @@
             </form>
             {% endif %}
             
+            {% if user.role == 'PLAYER' %}
+            <a href="{% url 'tracking:player_dashboard' %}" class="btn btn-outline-secondary w-100">
+              <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+            </a>
+            {% else %}
             <a href="{% url 'tracking:injury_list' %}" class="btn btn-outline-primary">
               <i class="bi bi-arrow-left me-2"></i>Back to List
             </a>
+            {% endif %}
             
             {% if user.role == 'ADMIN' %}
             <a href="/admin/injury_tracking/injuryrecord/{{ injury.pk }}/change/" class="btn btn-outline-secondary">

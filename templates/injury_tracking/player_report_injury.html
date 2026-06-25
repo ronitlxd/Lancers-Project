@@ -1,0 +1,382 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Report an Injury — LancersPulse{% endblock %}
+
+{% block content %}
+<div class="container py-3 pb-5" style="max-width:680px;" id="riPage">
+
+  {# ── Step header ── #}
+  <div class="mb-4">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <a href="{% url 'tracking:player_dashboard' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <h4 class="mb-0 fw-bold">Report an Injury</h4>
+    </div>
+    <div class="progress mb-1" style="height:4px;border-radius:4px;">
+      <div class="progress-bar bg-primary" id="ri-progressBar" role="progressbar" style="width:50%"></div>
+    </div>
+    <div class="small text-muted" id="ri-stepLabel">Step 1 of 2 — Report</div>
+  </div>
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">
+      {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    </div>
+  {% endif %}
+
+  <form method="post" action="{% url 'tracking:player_report_injury_submit' %}" id="riForm" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    {# ── STEP 1: Report ── #}
+    <div class="ri-step" data-ri-step="1">
+
+      <div class="mb-3">
+        <label for="{{ form.body_part.id_for_label }}" class="form-label">Where does it hurt? <span class="text-danger">*</span></label>
+        {{ form.body_part }}
+        {% if form.body_part.errors %}
+          <div class="invalid-feedback d-block">{% for error in form.body_part.errors %}{{ error }}{% endfor %}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label for="{{ form.injury_date.id_for_label }}" class="form-label">Date of injury <span class="text-danger">*</span></label>
+        {{ form.injury_date }}
+        {% if form.injury_date.errors %}
+          <div class="invalid-feedback d-block">{% for error in form.injury_date.errors %}{{ error }}{% endfor %}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label for="{{ form.description.id_for_label }}" class="form-label">What happened? <span class="text-danger">*</span></label>
+        {{ form.description }}
+        {% if form.description.errors %}
+          <div class="invalid-feedback d-block">{% for error in form.description.errors %}{{ error }}{% endfor %}</div>
+        {% endif %}
+        <small class="text-muted d-block mt-1">
+          <span id="ri-charCount">0</span> / 500 &middot; Add at least a sentence so your therapist understands the situation.
+        </small>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Context <span class="text-danger">*</span></label>
+        <div class="btn-group w-100" role="group">
+          <input type="radio" class="btn-check" name="context" id="ri-ctx-practice" value="PRACTICE" autocomplete="off"
+                 {% if form.context.value == 'PRACTICE' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-ctx-practice">Practice</label>
+          <input type="radio" class="btn-check" name="context" id="ri-ctx-game" value="GAME" autocomplete="off"
+                 {% if form.context.value == 'GAME' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-ctx-game">Game</label>
+          <input type="radio" class="btn-check" name="context" id="ri-ctx-other" value="OTHER" autocomplete="off"
+                 {% if form.context.value == 'OTHER' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-ctx-other">Other</label>
+        </div>
+        {% if form.context.errors %}
+          <div class="invalid-feedback d-block">{% for error in form.context.errors %}{{ error }}{% endfor %}</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">How did the injury occur?</label>
+        <div class="btn-group w-100" role="group">
+          <input type="radio" class="btn-check" name="contact_type" id="ri-contact-yes" value="CONTACT" autocomplete="off"
+                 {% if form.contact_type.value == 'CONTACT' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-contact-yes">Contact</label>
+          <input type="radio" class="btn-check" name="contact_type" id="ri-contact-no" value="NON_CONTACT" autocomplete="off"
+                 {% if form.contact_type.value == 'NON_CONTACT' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-contact-no">Non-Contact</label>
+          <input type="radio" class="btn-check" name="contact_type" id="ri-contact-unsure" value="UNKNOWN" autocomplete="off"
+                 {% if form.contact_type.value == 'CONTACT' or form.contact_type.value == 'NON_CONTACT' %}{% else %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-contact-unsure">Not Sure</label>
+        </div>
+        <small class="text-muted d-block mt-1">Your therapist will confirm this during review.</small>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Could you keep playing?</label>
+        <div class="btn-group w-100" role="group">
+          <input type="radio" class="btn-check" name="could_continue" id="ri-cc-yes" value="CONTINUED" autocomplete="off"
+                 {% if form.could_continue.value == 'CONTINUED' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-cc-yes">Yes</label>
+          <input type="radio" class="btn-check" name="could_continue" id="ri-cc-no" value="STOPPED" autocomplete="off"
+                 {% if form.could_continue.value == 'STOPPED' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-cc-no">No</label>
+          <input type="radio" class="btn-check" name="could_continue" id="ri-cc-later" value="STOPPED_LATER" autocomplete="off"
+                 {% if form.could_continue.value == 'STOPPED_LATER' %}checked{% endif %}>
+          <label class="btn btn-outline-primary" for="ri-cc-later">Stopped later</label>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="id_pain_level" class="form-label">
+          Pain right now: <strong id="ri-painValue">{{ form.pain_level.value|default:"0" }}</strong> / 10
+        </label>
+        {{ form.pain_level }}
+        <div class="d-flex justify-content-between small text-muted">
+          <span>0 = none</span>
+          <span>10 = worst</span>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">What kind of injury?</label>
+        <div class="d-flex flex-wrap gap-2" id="ri-natureChips">
+          <input type="radio" class="btn-check" name="injury_nature" id="ri-nature-BRUISE" value="BRUISE" autocomplete="off" {% if form.injury_nature.value == 'BRUISE' %}checked{% endif %}>
+          <label class="btn btn-sm btn-outline-secondary" for="ri-nature-BRUISE">Bruise</label>
+          <input type="radio" class="btn-check" name="injury_nature" id="ri-nature-TWIST" value="TWIST" autocomplete="off" {% if form.injury_nature.value == 'TWIST' %}checked{% endif %}>
+          <label class="btn btn-sm btn-outline-secondary" for="ri-nature-TWIST">Twist</label>
+          <input type="radio" class="btn-check" name="injury_nature" id="ri-nature-PULL" value="PULL" autocomplete="off" {% if form.injury_nature.value == 'PULL' %}checked{% endif %}>
+          <label class="btn btn-sm btn-outline-secondary" for="ri-nature-PULL">Pull</label>
+          <input type="radio" class="btn-check" name="injury_nature" id="ri-nature-IMPACT" value="IMPACT" autocomplete="off" {% if form.injury_nature.value == 'IMPACT' %}checked{% endif %}>
+          <label class="btn btn-sm btn-outline-secondary" for="ri-nature-IMPACT">Impact</label>
+          <input type="radio" class="btn-check" name="injury_nature" id="ri-nature-CUT" value="CUT" autocomplete="off" {% if form.injury_nature.value == 'CUT' %}checked{% endif %}>
+          <label class="btn btn-sm btn-outline-secondary" for="ri-nature-CUT">Cut</label>
+          <input type="radio" class="btn-check" name="injury_nature" id="ri-nature-OTHER_N" value="OTHER" autocomplete="off" {% if form.injury_nature.value == 'OTHER' %}checked{% endif %}>
+          <label class="btn btn-sm btn-outline-secondary" for="ri-nature-OTHER_N">Other</label>
+        </div>
+        <small class="text-muted d-block mt-1">Optional — your best guess helps your therapist prepare.</small>
+      </div>
+
+      <div class="mb-3">
+        <label for="{{ form.photo.id_for_label }}" class="form-label">Photo</label>
+        {{ form.photo }}
+        {% if form.photo.errors %}
+          <div class="invalid-feedback d-block">{% for error in form.photo.errors %}{{ error }}{% endfor %}</div>
+        {% endif %}
+        <small class="text-muted d-block mt-1">Optional — helps your therapist.</small>
+        <div id="ri-photoPreviewWrap" class="mt-2" style="display:none;">
+          <img id="ri-photoPreview" src="" alt="Preview" style="max-width:120px;max-height:120px;border-radius:8px;border:1px solid #e2e8f0;">
+          <span id="ri-photoFilename" class="small text-muted ms-2"></span>
+        </div>
+      </div>
+
+    </div>
+
+    {# ── STEP 2: Review ── #}
+    <div class="ri-step" data-ri-step="2" style="display:none;">
+      <h6 class="mb-3">Review your report</h6>
+      <div class="card bg-light">
+        <div class="card-body">
+          <dl class="row mb-0 small">
+            <dt class="col-sm-4 text-muted">Body part</dt>
+            <dd class="col-sm-8" id="ri-review-bodyPart">—</dd>
+            <dt class="col-sm-4 text-muted">Date</dt>
+            <dd class="col-sm-8" id="ri-review-date">—</dd>
+            <dt class="col-sm-4 text-muted">Context</dt>
+            <dd class="col-sm-8" id="ri-review-context">—</dd>
+            <dt class="col-sm-4 text-muted">How it occurred</dt>
+            <dd class="col-sm-8" id="ri-review-contact">—</dd>
+            <dt class="col-sm-4 text-muted">Could keep playing</dt>
+            <dd class="col-sm-8" id="ri-review-continue">—</dd>
+            <dt class="col-sm-4 text-muted">Pain level</dt>
+            <dd class="col-sm-8" id="ri-review-pain">—</dd>
+            <dt class="col-sm-4 text-muted">Nature</dt>
+            <dd class="col-sm-8" id="ri-review-nature">—</dd>
+            <dt class="col-sm-4 text-muted">Description</dt>
+            <dd class="col-sm-8" id="ri-review-description">—</dd>
+            <dt class="col-sm-4 text-muted">Photo</dt>
+            <dd class="col-sm-8" id="ri-review-photo">—</dd>
+          </dl>
+        </div>
+      </div>
+      <p class="text-muted small mt-3 mb-0">
+        <i class="bi bi-info-circle me-1"></i>
+        A therapist will review your report shortly and confirm the clinical details.
+      </p>
+    </div>
+
+  </form>
+</div>
+
+{# ── Sticky page footer ── #}
+<div class="ri-page-footer">
+  <div class="container d-flex align-items-center justify-content-between gap-3" style="max-width:680px;">
+    <div class="small text-muted ri-footer-selected" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+      Selected: <strong id="ri-footerPartName">None</strong>
+    </div>
+    <div class="d-flex gap-2 flex-shrink-0">
+      <a href="{% url 'tracking:player_dashboard' %}" class="btn btn-outline-secondary btn-sm" id="ri-cancelBtn">Cancel</a>
+      <button type="button" class="btn btn-outline-secondary btn-sm" id="ri-prevBtn" style="display:none;">
+        <i class="bi bi-arrow-left me-1"></i>Back
+      </button>
+      <button type="button" class="btn btn-primary btn-sm" id="ri-nextBtn" disabled>
+        Next <i class="bi bi-arrow-right ms-1"></i>
+      </button>
+      <button type="submit" form="riForm" class="btn btn-success btn-sm" id="ri-submitBtn" style="display:none;">
+        <i class="bi bi-check2 me-1"></i>Submit Report
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .ri-page-footer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff;
+    border-top: 1px solid #e2e8f0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+    padding: 12px 16px;
+    z-index: 1040;
+  }
+  @media (max-width: 768px) {
+    #riPage { padding-bottom: 80px !important; }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  let step = 1;
+
+  const stepNames   = ['', 'Report', 'Review'];
+  const progressPct = ['', '50', '100'];
+
+  const stepLabel      = document.getElementById('ri-stepLabel');
+  const progressBar    = document.getElementById('ri-progressBar');
+  const prevBtn         = document.getElementById('ri-prevBtn');
+  const nextBtn         = document.getElementById('ri-nextBtn');
+  const submitBtn       = document.getElementById('ri-submitBtn');
+  const cancelBtn       = document.getElementById('ri-cancelBtn');
+  const footerPartName  = document.getElementById('ri-footerPartName');
+  const bodyPartSelect  = document.getElementById('{{ form.body_part.id_for_label }}');
+  const dateInput       = document.getElementById('{{ form.injury_date.id_for_label }}');
+  const desc            = document.getElementById('{{ form.description.id_for_label }}');
+  const charCount       = document.getElementById('ri-charCount');
+  const painSlider      = document.getElementById('{{ form.pain_level.id_for_label }}');
+  const painValue       = document.getElementById('ri-painValue');
+  const photoInput      = document.getElementById('{{ form.photo.id_for_label }}');
+  const photoPreviewWrap = document.getElementById('ri-photoPreviewWrap');
+  const photoPreview    = document.getElementById('ri-photoPreview');
+  const photoFilename   = document.getElementById('ri-photoFilename');
+  const form            = document.getElementById('riForm');
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  if (dateInput && !dateInput.value) { dateInput.value = todayStr; }
+  if (dateInput) { dateInput.max = todayStr; }
+
+  function showStep(n) {
+    step = n;
+    document.querySelectorAll('.ri-step').forEach(el => {
+      el.style.display = (parseInt(el.dataset.riStep) === n) ? '' : 'none';
+    });
+    stepLabel.textContent = `Step ${n} of 2 — ${stepNames[n]}`;
+    progressBar.style.width = progressPct[n] + '%';
+    prevBtn.style.display   = n > 1 ? '' : 'none';
+    nextBtn.style.display   = n < 2 ? '' : 'none';
+    submitBtn.style.display = n === 2 ? '' : 'none';
+    cancelBtn.style.display = n === 1 ? '' : 'none';
+    updateNextEnabled();
+    if (n === 2) populateReview();
+    window.scrollTo(0, 0);
+  }
+
+  function isDateValid() {
+    if (!dateInput || !dateInput.value) return false;
+    return dateInput.value <= todayStr;
+  }
+
+  function hasContext() {
+    return !!form.querySelector('input[name="context"]:checked');
+  }
+
+  function updateNextEnabled() {
+    if (step === 1) {
+      const bodyPartOk = bodyPartSelect && bodyPartSelect.value;
+      nextBtn.disabled = !(bodyPartOk && isDateValid() && hasContext());
+    } else {
+      nextBtn.disabled = false;
+    }
+  }
+
+  function updateFooterPartName() {
+    if (!bodyPartSelect) return;
+    const opt = bodyPartSelect.selectedOptions[0];
+    footerPartName.textContent = (opt && opt.value) ? opt.textContent : 'None';
+  }
+
+  if (bodyPartSelect) {
+    bodyPartSelect.addEventListener('change', () => { updateFooterPartName(); updateNextEnabled(); });
+    updateFooterPartName();
+  }
+
+  if (dateInput) dateInput.addEventListener('change', updateNextEnabled);
+
+  form.querySelectorAll('input[name="context"]').forEach(el => {
+    el.addEventListener('change', updateNextEnabled);
+  });
+
+  if (desc) desc.addEventListener('input', () => {
+    if (charCount) charCount.textContent = desc.value.length;
+  });
+  if (desc && charCount) charCount.textContent = desc.value.length;
+
+  if (painSlider && painValue) {
+    painSlider.addEventListener('input', () => { painValue.textContent = painSlider.value; });
+  }
+
+  if (photoInput) {
+    photoInput.addEventListener('change', () => {
+      const file = photoInput.files && photoInput.files[0];
+      if (!file) {
+        photoPreviewWrap.style.display = 'none';
+        return;
+      }
+      photoFilename.textContent = file.name;
+      if (file.type && file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          photoPreview.src = e.target.result;
+          photoPreview.style.display = '';
+          photoPreviewWrap.style.display = '';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        photoPreview.style.display = 'none';
+        photoPreviewWrap.style.display = '';
+      }
+    });
+  }
+
+  function labelFor(name, value) {
+    if (!value) return '—';
+    const input = form.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (!input) return value;
+    const label = form.querySelector(`label[for="${input.id}"]`);
+    return label ? label.textContent : value;
+  }
+
+  function populateReview() {
+    const opt = bodyPartSelect ? bodyPartSelect.selectedOptions[0] : null;
+    document.getElementById('ri-review-bodyPart').textContent = (opt && opt.value) ? opt.textContent : '—';
+    document.getElementById('ri-review-date').textContent = dateInput ? dateInput.value : '—';
+
+    const ctx = form.querySelector('input[name="context"]:checked');
+    document.getElementById('ri-review-context').textContent = labelFor('context', ctx ? ctx.value : null);
+
+    const contact = form.querySelector('input[name="contact_type"]:checked');
+    document.getElementById('ri-review-contact').textContent = labelFor('contact_type', contact ? contact.value : null);
+
+    const cc = form.querySelector('input[name="could_continue"]:checked');
+    document.getElementById('ri-review-continue').textContent = labelFor('could_continue', cc ? cc.value : null);
+
+    document.getElementById('ri-review-pain').textContent = painSlider ? (painSlider.value + ' / 10') : '—';
+
+    const nature = form.querySelector('input[name="injury_nature"]:checked');
+    document.getElementById('ri-review-nature').textContent = labelFor('injury_nature', nature ? nature.value : null);
+
+    document.getElementById('ri-review-description').textContent = desc ? (desc.value || '—') : '—';
+
+    const file = photoInput && photoInput.files && photoInput.files[0];
+    document.getElementById('ri-review-photo').textContent = file ? file.name : 'No photo attached';
+  }
+
+  nextBtn.addEventListener('click', () => { if (step < 2) showStep(step + 1); });
+  prevBtn.addEventListener('click', () => { if (step > 1) showStep(step - 1); });
+
+  showStep(1);
+})();
+</script>
+{% endblock %}
