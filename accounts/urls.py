@@ -11,6 +11,7 @@ urlpatterns = [
     path('player/calendar/', views.player_calendar, name='player_calendar'),
     # Notifications
     path('notifications/', views.get_notifications, name='get_notifications'),
+    path('notifications/all/', views.notifications_page, name='notifications_page'),
     path('notifications/<int:pk>/read/', views.mark_notification_read, name='mark_notification_read'),
     path('notifications/read-all/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
     path('complete-registration/', views.complete_registration_view, name='complete_registration'),
@@ -43,6 +44,6 @@ urlpatterns = [
          name='password_reset_complete'),
     # Team access requests
     path('request-team-access/', views.request_team_access, name='request_team_access'),
-    path('admin/team-requests/', views.admin_review_requests, name='admin_review_requests'),
-    path('admin/team-requests/<int:req_id>/<str:decision>/', views.admin_decide_request, name='admin_decide_request'),
+    path('team-requests/', views.admin_review_requests, name='admin_review_requests'),
+    path('team-requests/<int:req_id>/<str:decision>/', views.admin_decide_request, name='admin_decide_request'),
 ]

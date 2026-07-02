@@ -595,14 +595,16 @@ def appointment_decide(request, pk, decision):
         appt.save()
         notify(appt.player,
                f"Your appointment on {appt.preferred_date:%b %d, %Y} ({appt.get_preferred_time_slot_display()}) was confirmed.",
-               notification_type='APPOINTMENT')
+               notification_type='APPOINTMENT',
+               send_email=True, subject='LancersPulse: Appointment confirmed')
         messages.success(request, f"Appointment for {appt.player.get_full_name()} confirmed.")
     else:
         appt.status = 'CANCELLED'
         appt.save()
         notify(appt.player,
                f"Your appointment request for {appt.preferred_date:%b %d, %Y} was cancelled.",
-               notification_type='APPOINTMENT')
+               notification_type='APPOINTMENT',
+               send_email=True, subject='LancersPulse: Appointment cancelled')
         messages.info(request, f"Appointment for {appt.player.get_full_name()} cancelled.")
     return redirect('tracking:appointment_inbox')
 
@@ -812,8 +814,21 @@ class InjuryCreateView(DoctorRequiredMixin, CreateView):
     
     def form_valid(self, form):
         form.instance.reported_by = self.request.user
+        response = super().form_valid(form)
+        injury = self.object
+        # Notify the player that a therapist has logged an injury
+        if injury.player and injury.player != self.request.user:
+            link = str(reverse_lazy('tracking:injury_detail', kwargs={'pk': injury.pk}))
+            notify(
+                injury.player,
+                f"A therapist has logged a {injury.body_part.name} injury ({injury.get_status_display()}) for you.",
+                notification_type='INJURY',
+                link=link,
+                send_email=True,
+                subject='LancersPulse: New injury recorded',
+            )
         messages.success(self.request, 'Injury report created successfully.')
-        return super().form_valid(form)
+        return response
     
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -825,6 +840,15 @@ class InjuryUpdateView(DoctorRequiredMixin, UpdateView):
     model = InjuryRecord
     form_class = InjuryUpdateForm
     template_name = 'injury_tracking/injury_update_form.html'
+
+    def get_queryset(self):
+        qs = InjuryRecord.objects.select_related(
+            'player', 'injury_type', 'body_part', 'severity'
+        )
+        # Doctors scoped to their own team; admins see everything
+        if self.request.user.role == 'DOCTOR' and self.request.user.team:
+            qs = qs.filter(player__team=self.request.user.team)
+        return qs
 
     def form_valid(self, form):
         # Snapshot pre-save state so we know what to notify about
@@ -868,7 +892,8 @@ class InjuryUpdateView(DoctorRequiredMixin, UpdateView):
         if medical_clearance and not old_clearance:
             notify(injury.player,
                    f"Medical clearance granted for your {injury.body_part.name} injury — you're cleared to play.",
-                   notification_type='CLEARANCE', link=link)
+                   notification_type='CLEARANCE', link=link,
+                   send_email=True, subject='LancersPulse: Medical clearance granted')
         elif status and status != old_status:
             notify(injury.player,
                    f"Your {injury.body_part.name} injury status changed to {injury.get_status_display()}.",
@@ -1218,8 +1243,13 @@ def update_injury_status(request, injury_id):
     """Update injury status via AJAX"""
     if request.user.role not in ['ADMIN', 'DOCTOR']:
         return JsonResponse({'error': 'Access denied'}, status=403)
-    
+
     injury = get_object_or_404(InjuryRecord, id=injury_id)
+
+    # Doctors may only update injuries belonging to their own team
+    if request.user.role == 'DOCTOR' and request.user.team:
+        if injury.player.team != request.user.team:
+            return JsonResponse({'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
         new_status = request.POST.get('status')
@@ -1249,43 +1279,202 @@ def mark_as_recovered(request, injury_id):
     if request.user.role not in ['ADMIN', 'DOCTOR']:
         messages.error(request, "Access denied. Doctor privileges required.")
         return redirect('tracking:injury_list')
-    
+
     injury = get_object_or_404(InjuryRecord, id=injury_id)
-    
+
+    # Doctors may only clear injuries on their own team
+    if request.user.role == 'DOCTOR' and request.user.team:
+        if injury.player.team != request.user.team:
+            messages.error(request, 'Access denied.')
+            return redirect('tracking:injury_list')
+
     if request.method == 'POST':
         injury.status = 'RECOVERED'
         injury.medical_clearance = True
         injury.clearance_date = timezone.now().date()
-        
-        # Calculate actual recovery time if not set
         if not injury.actual_recovery_time:
             recovery_days = (timezone.now().date() - injury.injury_date).days
             if recovery_days > 0:
                 injury.actual_recovery_time = recovery_days
-        
         injury.save()
         messages.success(request, f'Injury for {injury.player.get_full_name()} has been marked as recovered with medical clearance.')
         return redirect('tracking:injury_detail', pk=injury.id)
-    
+
     return redirect('tracking:injury_detail', pk=injury.id)
+
 
 @login_required
 def delete_injury(request, injury_id):
     """Delete an injury record (doctors and admins only)"""
     if request.user.role not in ['ADMIN', 'DOCTOR']:
-        messages.error(request, "Access denied. Doctor privileges required.")
+        messages.error(request, 'Access denied. Doctor privileges required.')
         return redirect('tracking:injury_list')
-    
+
     injury = get_object_or_404(InjuryRecord, id=injury_id)
+
+    if request.user.role == 'DOCTOR' and request.user.team:
+        if injury.player.team != request.user.team:
+            messages.error(request, 'Access denied.')
+            return redirect('tracking:injury_list')
+
     player_name = injury.player.get_full_name()
-    
+
     if request.method == 'POST':
         injury.delete()
         messages.success(request, f'Injury record for {player_name} has been deleted.')
         return redirect('tracking:injury_list')
-    
-    # GET request - show confirmation page
-    context = {
-        'injury': injury,
-    }
-    return render(request, 'injury_tracking/injury_confirm_delete.html', context)
+
+    return render(request, 'injury_tracking/injury_confirm_delete.html', {'injury': injury})
+
+
+# ── Export Views ────────────────────────────────────────────────────────────
+
+def _get_scoped_injuries(request):
+    """Return a role-scoped InjuryRecord queryset for export views."""
+    qs = InjuryRecord.objects.all()
+    if request.user.role == 'ADMIN':
+        return qs
+    if request.user.role in ('DOCTOR', 'COACH') and request.user.team:
+        return qs.filter(player__team=request.user.team)
+    return qs
+
+
+@login_required
+def export_injuries_csv(request):
+    """Export injury records as CSV (role-scoped)."""
+    import csv
+    from django.http import HttpResponse
+
+    if request.user.role not in ['ADMIN', 'DOCTOR', 'COACH']:
+        messages.error(request, 'Access denied.')
+        return redirect('tracking:injury_list')
+
+    qs = _get_scoped_injuries(request).select_related(
+        'player', 'injury_type', 'body_part', 'severity', 'reported_by'
+    ).order_by('-injury_date')
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="lancerspulse_injuries.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'ID', 'Player', 'Team', 'Injury Date', 'Body Part', 'Injury Type',
+        'Severity', 'Status', 'Contact Type', 'Missed Games', 'Missed Practices',
+        'Medical Clearance', 'Clearance Date', 'Est. Recovery (days)',
+        'Actual Recovery (days)', 'Reported By', 'Confidential',
+    ])
+    for inj in qs:
+        writer.writerow([
+            inj.id,
+            inj.player.get_full_name() if inj.player else '',
+            inj.player.team.name if (inj.player and inj.player.team) else '',
+            inj.injury_date.isoformat() if inj.injury_date else '',
+            str(inj.body_part) if inj.body_part else '',
+            str(inj.injury_type) if inj.injury_type else '',
+            str(inj.severity) if inj.severity else '',
+            inj.get_status_display(),
+            inj.get_contact_type_display() if inj.contact_type else '',
+            inj.missed_games if inj.missed_games is not None else '',
+            inj.missed_practices if inj.missed_practices is not None else '',
+            'Yes' if inj.medical_clearance else 'No',
+            inj.clearance_date.isoformat() if inj.clearance_date else '',
+            inj.estimated_recovery_time if inj.estimated_recovery_time is not None else '',
+            inj.actual_recovery_time if inj.actual_recovery_time is not None else '',
+            inj.reported_by.get_full_name() if inj.reported_by else '',
+            'Yes' if inj.is_confidential else 'No',
+        ])
+
+    return response
+
+
+@login_required
+def export_injuries_pdf(request):
+    """Export injury records as a styled PDF using ReportLab (role-scoped)."""
+    from django.http import HttpResponse
+
+    if request.user.role not in ['ADMIN', 'DOCTOR', 'COACH']:
+        messages.error(request, 'Access denied.')
+        return redirect('tracking:injury_list')
+
+    try:
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import (
+            SimpleDocTemplate, Table, TableStyle,
+            Paragraph, Spacer, HRFlowable,
+        )
+    except ImportError:
+        messages.error(request, 'PDF export requires reportlab. Run: pip install reportlab')
+        return redirect('tracking:injury_list')
+
+    qs = _get_scoped_injuries(request).select_related(
+        'player', 'injury_type', 'body_part', 'severity'
+    ).order_by('-injury_date')
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="lancerspulse_injuries.pdf"'
+
+    doc = SimpleDocTemplate(
+        response,
+        pagesize=landscape(A4),
+        rightMargin=1 * cm, leftMargin=1 * cm,
+        topMargin=1.5 * cm, bottomMargin=1 * cm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Title'], fontSize=16, spaceAfter=4)
+    sub_style = ParagraphStyle('ReportSub', parent=styles['Normal'], fontSize=9,
+                               textColor=colors.HexColor('#6c757d'))
+    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7.5, leading=10)
+
+    scope_label = f'Team: {request.user.team.name}' if request.user.team else 'All Teams'
+    elements = [
+        Paragraph('LancersPulse - Injury Report', title_style),
+        Paragraph(
+            f'Generated: {timezone.now().strftime("%B %d, %Y %H:%M UTC")}  |  '
+            f'Scope: {scope_label}  |  Records: {qs.count()}',
+            sub_style,
+        ),
+        Spacer(1, 0.3 * cm),
+        HRFlowable(width='100%', thickness=1.5, color=colors.HexColor('#0d6efd')),
+        Spacer(1, 0.3 * cm),
+    ]
+
+    headers = ['#', 'Player', 'Team', 'Date', 'Body Part', 'Type', 'Severity', 'Status', 'Missed\nGames', 'Cleared']
+    col_widths = [0.7*cm, 4*cm, 3.2*cm, 2.3*cm, 3*cm, 3.2*cm, 2.5*cm, 2.5*cm, 1.8*cm, 1.8*cm]
+
+    data = [headers]
+    for i, inj in enumerate(qs, 1):
+        data.append([
+            str(i),
+            Paragraph(inj.player.get_full_name() if inj.player else '--', cell_style),
+            Paragraph(inj.player.team.name if (inj.player and inj.player.team) else '--', cell_style),
+            inj.injury_date.strftime('%b %d, %Y') if inj.injury_date else '--',
+            Paragraph(str(inj.body_part) if inj.body_part else '--', cell_style),
+            Paragraph(str(inj.injury_type) if inj.injury_type else '--', cell_style),
+            str(inj.severity) if inj.severity else '--',
+            inj.get_status_display(),
+            str(inj.missed_games or '--'),
+            'Yes' if inj.medical_clearance else 'No',
+        ])
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND',     (0, 0), (-1, 0), colors.HexColor('#0d6efd')),
+        ('TEXTCOLOR',      (0, 0), (-1, 0), colors.white),
+        ('FONTNAME',       (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE',       (0, 0), (-1, 0), 8),
+        ('ALIGN',          (0, 0), (-1, 0), 'CENTER'),
+        ('TOPPADDING',     (0, 0), (-1, 0), 6),
+        ('BOTTOMPADDING',  (0, 0), (-1, 0), 6),
+        ('FONTSIZE',       (0, 1), (-1, -1), 8),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f0f4ff')]),
+        ('GRID',           (0, 0), (-1, -1), 0.25, colors.HexColor('#dee2e6')),
+        ('VALIGN',         (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING',     (0, 1), (-1, -1), 4),
+        ('BOTTOMPADDING',  (0, 1), (-1, -1), 4),
+    ]))
+    elements.append(table)
+    doc.build(elements)
+    return response

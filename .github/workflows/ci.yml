@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "dev", "feature/**"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    env:
+      SECRET_KEY: "ci-secret-key-not-used-in-prod"
+      DEBUG: "True"
+      ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DATABASE_URL: ""          # SQLite used by default in settings.py
+      EMAIL_BACKEND: "django.core.mail.backends.dummy.EmailBackend"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run system checks
+        run: python manage.py check --deploy 2>&1 | grep -v "WARNINGS\|W003\|W004\|W008\|W012\|ssl" || true
+        # suppress prod-only warnings (HSTS, SSL) that don't apply in CI
+
+      - name: Run migrations
+        run: python manage.py migrate --noinput
+
+      - name: Run test suite
+        run: python manage.py test accounts injury_tracking --verbosity=2
+
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run

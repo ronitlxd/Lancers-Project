@@ -15,6 +15,105 @@ from .models import (
     InjuryFollowUp, TeamRoster, Event
 )
 
+# ── Photo upload constraints ──────────────────────────────────────────────────
+PHOTO_ALLOWED_TYPES = {'image/jpeg', 'image/png', 'image/webp', 'image/gif'}
+PHOTO_ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+PHOTO_MAX_SIZE_MB = 5
+PHOTO_MAX_PIXELS = 4096 * 4096       # 16 MP hard cap
+PHOTO_TARGET_MAX_DIM = 1200          # resize longest edge to ≤ 1200 px
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _validate_and_resize_photo(image_file):
+    """
+    Validate a photo upload and silently resize it if it's too large.
+
+    Raises forms.ValidationError for:
+      - wrong file extension / content-type
+      - file exceeds PHOTO_MAX_SIZE_MB
+      - pixel dimensions exceed PHOTO_MAX_PIXELS
+
+    If the image is larger than PHOTO_TARGET_MAX_DIM on any axis, it is
+    resized in-place and returned as an InMemoryUploadedFile.
+    Returns the (possibly-resized) file object unchanged if it passes.
+    """
+    import os
+    from io import BytesIO
+
+    if image_file is None:
+        return image_file
+
+    # --- Extension check ---
+    ext = os.path.splitext(image_file.name)[1].lower()
+    if ext not in PHOTO_ALLOWED_EXTENSIONS:
+        raise forms.ValidationError(
+            f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(PHOTO_ALLOWED_EXTENSIONS))}."
+        )
+
+    # --- Size check (bytes) ---
+    max_bytes = PHOTO_MAX_SIZE_MB * 1024 * 1024
+    if hasattr(image_file, 'size') and image_file.size > max_bytes:
+        raise forms.ValidationError(
+            f"File too large ({image_file.size / 1024 / 1024:.1f} MB). "
+            f"Maximum is {PHOTO_MAX_SIZE_MB} MB."
+        )
+
+    # --- Pillow pixel checks + optional resize ---
+    try:
+        from PIL import Image
+        from django.core.files.uploadedfile import InMemoryUploadedFile
+
+        image_file.seek(0)
+        img = Image.open(image_file)
+        img.verify()          # detects truncated / corrupt files
+
+        image_file.seek(0)
+        img = Image.open(image_file)
+
+        # Content-type guard (basic)
+        if img.format and f'image/{img.format.lower()}' not in PHOTO_ALLOWED_TYPES:
+            raise forms.ValidationError(
+                f"Unsupported image format '{img.format}'. "
+                f"Allowed: JPEG, PNG, WebP, GIF."
+            )
+
+        w, h = img.size
+        if w * h > PHOTO_MAX_PIXELS:
+            raise forms.ValidationError(
+                f"Image too large ({w}×{h} px). Maximum is {PHOTO_MAX_PIXELS // (1024 * 1024)} MP."
+            )
+
+        # Resize if needed (keeps aspect ratio)
+        if max(w, h) > PHOTO_TARGET_MAX_DIM:
+            img.thumbnail((PHOTO_TARGET_MAX_DIM, PHOTO_TARGET_MAX_DIM), Image.LANCZOS)
+            output = BytesIO()
+            fmt = img.format or 'JPEG'
+            save_kwargs = {'format': fmt}
+            if fmt == 'JPEG':
+                save_kwargs['quality'] = 88
+                save_kwargs['optimize'] = True
+            img.save(output, **save_kwargs)
+            output.seek(0)
+
+            content_type = f'image/{fmt.lower()}'
+            image_file = InMemoryUploadedFile(
+                output,
+                field_name=image_file.field_name,
+                name=image_file.name,
+                content_type=content_type,
+                size=output.getbuffer().nbytes,
+                charset=None,
+            )
+
+    except forms.ValidationError:
+        raise
+    except Exception as exc:
+        raise forms.ValidationError(
+            f"Could not process the image. Make sure it is a valid photo file. ({exc})"
+        )
+
+    return image_file
+
 User = get_user_model()
 
 
@@ -91,7 +190,10 @@ class InjuryReportForm(forms.ModelForm):
         self.fields['could_continue'].help_text = "Whether the player was able to keep playing after the injury."
         self.fields['pain_level'].help_text = "Player's self-reported pain level, 0 (none) to 10 (worst)."
         self.fields['injury_nature'].help_text = "Player's own description of the type of injury (e.g. twist, bruise)."
-        self.fields['photo'].help_text = "Optional photo of the injury."
+        self.fields['photo'].help_text = (
+            f"Optional photo. Max {PHOTO_MAX_SIZE_MB} MB. "
+            "Accepted: JPEG, PNG, WebP, GIF. Large images are automatically resized."
+        )
 
         # ── Player queryset logic (unchanged from Team 13) ─────────────────
         authorized_teams = None
@@ -171,6 +273,12 @@ class InjuryReportForm(forms.ModelForm):
         self.fields['player'].queryset = player_queryset
         # ───────────────────────────────────────────────────────────────────
 
+    def clean_photo(self):
+        photo = self.cleaned_data.get('photo')
+        if photo and photo is not False:
+            return _validate_and_resize_photo(photo)
+        return photo
+
 
 class InjuryUpdateForm(forms.ModelForm):
     """Form for updating an existing injury record (therapist/doctor view)."""
@@ -245,8 +353,16 @@ class InjuryUpdateForm(forms.ModelForm):
         self.fields['could_continue'].help_text = "Whether the player was able to keep playing after the injury."
         self.fields['pain_level'].help_text = "Player's self-reported pain level, 0 (none) to 10 (worst)."
         self.fields['injury_nature'].help_text = "Player's own description of the type of injury (e.g. twist, bruise)."
-        self.fields['photo'].help_text = "Optional photo of the injury. Upload a new one to replace it."
+        self.fields['photo'].help_text = (
+            f"Optional photo. Max {PHOTO_MAX_SIZE_MB} MB. "
+            f"Accepted: JPEG, PNG, WebP, GIF. Large images are automatically resized."
+        )
 
+    def clean_photo(self):
+        photo = self.cleaned_data.get('photo')
+        if photo and photo is not False:
+            return _validate_and_resize_photo(photo)
+        return photo
 
 
 class InjuryFollowUpForm(forms.ModelForm):
@@ -354,7 +470,7 @@ class TeamRosterForm(forms.ModelForm):
 
 
 class EventForm(forms.ModelForm):
-    """Form for creating/updating team events — unchanged from Team 13."""
+    """Form for creating/updating team events."""
 
     class Meta:
         model = Event
@@ -388,13 +504,7 @@ class EventForm(forms.ModelForm):
 
 
 class PlayerInjuryReportForm(forms.ModelForm):
-    """
-    Player self-report form (2-step wizard: Report -> Review).
-
-    Deliberately excludes clinical fields (injury_type, severity, treatment) —
-    those are placeholder-defaulted at creation time and confirmed by the
-    therapist later. The player only reports what they themselves observed.
-    """
+    """Player self-report form (2-step wizard: Report -> Review)."""
 
     class Meta:
         model = InjuryRecord
@@ -437,6 +547,10 @@ class PlayerInjuryReportForm(forms.ModelForm):
         self.fields['pain_level'].required = False
         self.fields['injury_nature'].required = False
         self.fields['photo'].required = False
+        self.fields['photo'].help_text = (
+            f"Optional photo. Max {PHOTO_MAX_SIZE_MB} MB. "
+            "Accepted: JPEG, PNG, WebP, GIF. Large images are automatically resized."
+        )
 
     def clean_injury_date(self):
         injury_date = self.cleaned_data.get('injury_date')
@@ -451,3 +565,9 @@ class PlayerInjuryReportForm(forms.ModelForm):
                 "Please add a bit more detail (at least 10 characters) so your therapist understands the situation."
             )
         return description
+
+    def clean_photo(self):
+        photo = self.cleaned_data.get('photo')
+        if photo and photo is not False:
+            return _validate_and_resize_photo(photo)
+        return photo

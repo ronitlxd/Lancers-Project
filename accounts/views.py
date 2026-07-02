@@ -572,6 +572,27 @@ def mark_all_notifications_read(request):
 
 
 @login_required
+def notifications_page(request):
+    """Full notifications list page with pagination."""
+    from .models import Notification
+    from django.core.paginator import Paginator
+
+    qs = Notification.objects.filter(user=request.user).order_by('-created_at')
+    unread_count = qs.filter(is_read=False).count()
+
+    # Mark all as read on page visit
+    qs.filter(is_read=False).update(is_read=True)
+
+    paginator = Paginator(qs, 20)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    return render(request, 'accounts/notifications.html', {
+        'page_obj': page_obj,
+        'unread_count': unread_count,
+    })
+
+
+@login_required
 def request_team_access(request):
     if request.user.role not in ['COACH', 'DOCTOR', 'ADMIN']:
         messages.error(request, 'Only coaches and doctors can request additional team access.')
@@ -622,3 +643,49 @@ def admin_decide_request(request, req_id, decision):
     req.reviewed_at = timezone.now()
     req.save()
     return redirect('admin_review_requests')
+
+# ---------------------------------------------------------------------------
+# Protected media serving (dev only)
+# Injury photos are sensitive; require login + ownership/team check before
+# serving them. Profile pictures are less sensitive and served normally.
+# ---------------------------------------------------------------------------
+import os
+from django.http import FileResponse, Http404
+from django.conf import settings as django_settings
+
+@login_required
+def serve_injury_photo(request, filename):
+    """Serve injury_photos/<filename> only to authenticated users who have
+    permission to view that record (player who owns it, their team doctor,
+    their team coach, or an admin)."""
+    from injury_tracking.models import InjuryRecord
+
+    # Locate the file on disk
+    file_path = os.path.join(django_settings.MEDIA_ROOT, 'injury_photos', filename)
+    if not os.path.isfile(file_path):
+        raise Http404
+
+    # Fi    # Find the InjuryRecord that owns this file
+    try:
+        injury = InjuryRecord.objects.select_related('player').get(
+            photo='injury_photos/' + filename
+        )
+    except InjuryRecord.DoesNotExist:
+        raise Http404
+
+    # Permission check
+    user = request.user
+    allowed = False
+    if user.role == 'ADMIN':
+        allowed = True
+    elif user.role == 'PLAYER' and injury.player == user:
+        allowed = True
+    elif user.role in ('DOCTOR', 'COACH'):
+        # Allow if same team (or user has no team = multi-team access)
+        if user.team is None or user.team == injury.player.team:
+            allowed = True
+
+    if not allowed:
+        raise Http404
+
+    return FileResponse(open(file_path, 'rb'))
