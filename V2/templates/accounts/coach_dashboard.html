@@ -231,46 +231,6 @@
         </div>
       </div>
 
-      <!-- Team Wellness Averages -->
-      {% if team_wellness %}
-      <div class="card mb-3">
-        <div class="card-header">
-          <h5 class="card-title mb-0">
-            <i class="bi bi-clipboard2-heart me-2"></i>Team Wellness (Latest Check-ins)
-            <small class="text-muted ms-2 fw-normal">{{ team_wellness.count }} player{{ team_wellness.count|pluralize }} reported</small>
-          </h5>
-        </div>
-        <div class="card-body">
-          <div class="row g-3 text-center">
-            <div class="col-4">
-              <div class="p-2 rounded" style="background:rgba(13,110,253,0.07);">
-                <div class="h4 mb-0 fw-bold {% if team_wellness.avg_sleep >= 4 %}text-success{% elif team_wellness.avg_sleep >= 3 %}text-warning{% else %}text-danger{% endif %}">
-                  {{ team_wellness.avg_sleep }}
-                </div>
-                <small class="text-muted"><i class="bi bi-moon-stars me-1"></i>Avg Sleep</small>
-              </div>
-            </div>
-            <div class="col-4">
-              <div class="p-2 rounded" style="background:rgba(220,53,69,0.07);">
-                <div class="h4 mb-0 fw-bold {% if team_wellness.avg_pain <= 2 %}text-success{% elif team_wellness.avg_pain <= 3 %}text-warning{% else %}text-danger{% endif %}">
-                  {{ team_wellness.avg_pain }}
-                </div>
-                <small class="text-muted"><i class="bi bi-thermometer-half me-1"></i>Avg Pain</small>
-              </div>
-            </div>
-            <div class="col-4">
-              <div class="p-2 rounded" style="background:rgba(25,135,84,0.07);">
-                <div class="h4 mb-0 fw-bold {% if team_wellness.avg_mood >= 4 %}text-success{% elif team_wellness.avg_mood >= 3 %}text-warning{% else %}text-danger{% endif %}">
-                  {{ team_wellness.avg_mood }}
-                </div>
-                <small class="text-muted"><i class="bi bi-emoji-smile me-1"></i>Avg Mood</small>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      {% endif %}
-
       <!-- Players Returning Soon -->
       {% if returning_soon %}
       <div class="card mb-3">

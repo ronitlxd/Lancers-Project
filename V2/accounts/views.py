@@ -516,11 +516,13 @@ def player_calendar(request):
                 'kind': 'follow_up',
                 'meta': fu.get_status_display(),
             })
-    # Sort by datetime/date — coerce date to datetime for comparison
+    # Sort by datetime/date — coerce to naive datetime for comparison
     from datetime import datetime as _dt
     def _key(item):
         w = item['when']
-        return w if isinstance(w, _dt) else _dt.combine(w, _dt.min.time())
+        if isinstance(w, _dt):
+            return w.replace(tzinfo=None)  # strip tz so naive/aware don't clash
+        return _dt.combine(w, _dt.min.time())
     upcoming.sort(key=_key)
     upcoming = upcoming[:6]
 

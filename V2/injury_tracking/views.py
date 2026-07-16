@@ -331,29 +331,6 @@ def admin_dashboard(request):
     monthly_counts = json.dumps([m['count'] for m in monthly_qs])
     trend_label = 'Last 12 Months' if InjuryRecord.objects.filter(injury_date__gte=twelve_months_ago).exists() else 'All Time'
 
-    # ---------- Wellness participation — most recent week with any check-in ----------
-    week_start = today_date - timedelta(days=today_date.weekday())
-    wellness_this_week = WellnessCheckIn.objects.filter(
-        submitted_at__date__gte=week_start
-    ).values('player').distinct().count()
-    if wellness_this_week == 0:
-        # No check-ins this week — find the most recent week that had any
-        latest_checkin = WellnessCheckIn.objects.order_by('-submitted_at').first()
-        if latest_checkin:
-            lw = latest_checkin.submitted_at.date()
-            lw_start = lw - timedelta(days=lw.weekday())
-            lw_end = lw_start + timedelta(days=6)
-            wellness_this_week = WellnessCheckIn.objects.filter(
-                submitted_at__date__gte=lw_start,
-                submitted_at__date__lte=lw_end,
-            ).values('player').distinct().count()
-            wellness_week_label = f"Week of {lw_start.strftime('%b %d')}"
-        else:
-            wellness_week_label = 'This Week'
-    else:
-        wellness_week_label = 'This Week'
-    wellness_pct = round(wellness_this_week / total_players * 100) if total_players > 0 else 0
-
     # ---------- Top Injured Athletes ----------
     top_injured = (
         CustomUser.objects.filter(role='PLAYER')
@@ -361,15 +338,6 @@ def admin_dashboard(request):
         .filter(injury_count__gt=0)
         .order_by('-injury_count')[:5]
     )
-
-    # ---------- Athletes at Risk: latest check-in per player with pain >= 4 ----------
-    seen_players = set()
-    at_risk_list = []
-    for checkin in WellnessCheckIn.objects.select_related('player').order_by('-submitted_at'):
-        if checkin.player_id not in seen_players:
-            seen_players.add(checkin.player_id)
-            if checkin.pain_score >= 4:
-                at_risk_list.append(checkin)
 
     context = {
         'total_players': total_players,
@@ -388,13 +356,6 @@ def admin_dashboard(request):
         'monthly_labels': monthly_labels,
         'monthly_counts': monthly_counts,
         'trend_label': trend_label,
-        # Wellness
-        'wellness_this_week': wellness_this_week,
-        'wellness_pct': wellness_pct,
-        'wellness_week_label': wellness_week_label,
-        'total_players_for_wellness': total_players,
-        # At-risk athletes (pain >= 4 in latest check-in)
-        'at_risk_list': at_risk_list,
         # Top injured athletes leaderboard
         'top_injured': top_injured,
     }
@@ -485,33 +446,6 @@ def coach_dashboard(request):
         if p['est_return'] and today_c <= p['est_return'] <= two_weeks
     ]
 
-    # Team wellness averages (latest check-in per player this past month)
-    team_player_ids = list(players.values_list('id', flat=True))
-    monday = today_c - timedelta(days=today_c.weekday())
-    team_wellness_qs = (
-        WellnessCheckIn.objects
-        .filter(player__in=team_player_ids)
-        .order_by('-week_start')
-    )
-    seen = set()
-    latest_checkins = []
-    for cw in team_wellness_qs:
-        if cw.player_id not in seen:
-            seen.add(cw.player_id)
-            latest_checkins.append(cw)
-
-    team_wellness = None
-    if latest_checkins:
-        avg_sleep = round(sum(c.sleep_score for c in latest_checkins) / len(latest_checkins), 1)
-        avg_pain  = round(sum(c.pain_score  for c in latest_checkins) / len(latest_checkins), 1)
-        avg_mood  = round(sum(c.mood_score  for c in latest_checkins) / len(latest_checkins), 1)
-        team_wellness = {
-            'avg_sleep': avg_sleep,
-            'avg_pain': avg_pain,
-            'avg_mood': avg_mood,
-            'count': len(latest_checkins),
-        }
-
     # Recent team injuries (last 10)
     recent_injuries = team_injuries.select_related(
         'player', 'injury_type', 'body_part', 'severity', 'reported_by'
@@ -526,7 +460,6 @@ def coach_dashboard(request):
         'total_players': total_players_count,
         'recent_injuries': recent_injuries,
         'returning_soon': returning_soon,
-        'team_wellness': team_wellness,
     }
 
     return render(request, 'accounts/coach_dashboard.html', context)
@@ -565,43 +498,13 @@ def doctor_dashboard(request):
         medical_clearance=False
     ).select_related('player', 'injury_type')
 
-    # ---------- Wellness snapshot for active patients ----------
-    # Build a quick {player_id: latest_checkin} map for injuries in recent_injuries
-    patient_ids = list({inj.player_id for inj in recent_injuries})
-    latest_wellness = {}
-    for checkin in WellnessCheckIn.objects.filter(
-        player_id__in=patient_ids
-    ).order_by('player_id', '-submitted_at').distinct():
-        if checkin.player_id not in latest_wellness:
-            latest_wellness[checkin.player_id] = checkin
-
-    # Attach wellness to each injury via annotated list
-    recent_injuries_with_wellness = []
-    for inj in recent_injuries:
-        recent_injuries_with_wellness.append({
-            'injury': inj,
-            'wellness': latest_wellness.get(inj.player_id),
-        })
-
-    # Sort: high pain first (pain_score desc), then by reported_date desc
-    recent_injuries_with_wellness.sort(
-        key=lambda x: (-(x['wellness'].pain_score if x['wellness'] else 0),)
-    )
-
-    # Quick summary counts for the stat widgets
-    active_patients = len(patient_ids)
-    high_pain_patients = [
-        row for row in recent_injuries_with_wellness
-        if row['wellness'] and row['wellness'].pain_score >= 4
-    ]
+    active_patients = recent_injuries.count()
 
     context = {
         'recent_injuries': recent_injuries,
-        'recent_injuries_with_wellness': recent_injuries_with_wellness,
         'follow_ups_due': follow_ups_due,
         'pending_clearances': pending_clearances,
         'active_patients': active_patients,
-        'high_pain_patients': high_pain_patients,
     }
 
     return render(request, 'accounts/doctor_dashboard.html', context)
@@ -721,21 +624,6 @@ def player_dashboard(request):
         status='RECOVERED'
     ).aggregate(s=Sum('estimated_recovery_time'))['s'] or 0
 
-    # ---------- Wellness history (last 4 check-ins) for trend chart ----------
-    wellness_history_qs = list(
-        WellnessCheckIn.objects.filter(player=user)
-        .order_by('-week_start')[:4]
-    )
-    wellness_history_qs.reverse()  # chronological for chart
-    wellness_labels = json.dumps([w.week_start.strftime('%b %d') for w in wellness_history_qs])
-    wellness_sleep  = json.dumps([w.sleep_score for w in wellness_history_qs])
-    wellness_pain   = json.dumps([w.pain_score for w in wellness_history_qs])
-    wellness_mood   = json.dumps([w.mood_score for w in wellness_history_qs])
-
-    # This week's check-in (for summary card when already submitted)
-    monday = today - timedelta(days=today.weekday())
-    this_week_checkin = WellnessCheckIn.objects.filter(player=user, week_start=monday).first()
-
     context = {
         # Injury data
         'all_injuries': all_injuries,
@@ -757,25 +645,9 @@ def player_dashboard(request):
         'overdue_follow_ups': overdue_follow_ups,
         # Next appointment hero strip
         'next_appointment': next_appointment,
-        # Wellness check-in prompt + this week's submission
-        'show_wellness_prompt': _needs_wellness_checkin(user, today),
-        'this_week_checkin': this_week_checkin,
-        # Wellness trend chart
-        'wellness_labels': wellness_labels,
-        'wellness_sleep': wellness_sleep,
-        'wellness_pain': wellness_pain,
-        'wellness_mood': wellness_mood,
-        'has_wellness_history': len(wellness_history_qs) >= 2,
     }
 
     return render(request, 'accounts/player_dashboard.html', context)
-
-
-def _needs_wellness_checkin(user, today):
-    """Return True if the player hasn't submitted a wellness check-in this week."""
-    from datetime import timedelta
-    monday = today - timedelta(days=today.weekday())  # this week's Monday
-    return not WellnessCheckIn.objects.filter(player=user, week_start=monday).exists()
 
 
 @login_required

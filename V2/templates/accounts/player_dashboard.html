@@ -52,54 +52,6 @@
   </div>
   {% endif %}
 
-  <!-- Wellness Check-in Prompt / Summary -->
-  {% if show_wellness_prompt %}
-  <div class="row mb-4">
-    <div class="col-12">
-      <div class="alert alert-info d-flex align-items-center justify-content-between flex-wrap gap-2 mb-0"
-           style="border-left: 4px solid #0dcaf0;">
-        <div class="d-flex align-items-center gap-3">
-          <i class="bi bi-heart-pulse-fill" style="font-size:1.75rem; color:#0dcaf0;"></i>
-          <div>
-            <strong>Weekly Wellness Check-in</strong>
-            <div class="small text-muted">Takes 30 seconds. Helps the therapy team spot issues early.</div>
-          </div>
-        </div>
-        <button type="button" class="btn btn-info btn-sm text-white"
-                data-bs-toggle="modal" data-bs-target="#wellnessModal">
-          <i class="bi bi-clipboard2-heart me-1"></i>Check In Now
-        </button>
-      </div>
-    </div>
-  </div>
-  {% elif this_week_checkin %}
-  <div class="row mb-4">
-    <div class="col-12">
-      <div class="alert d-flex align-items-center justify-content-between flex-wrap gap-2 mb-0"
-           style="background:rgba(25,135,84,0.08); border-left:4px solid #198754;">
-        <div class="d-flex align-items-center gap-3">
-          <i class="bi bi-check-circle-fill" style="font-size:1.75rem; color:#198754;"></i>
-          <div>
-            <strong class="text-success">This Week's Check-in Submitted</strong>
-            <div class="small text-muted">Week of {{ this_week_checkin.week_start|date:"M d" }}</div>
-          </div>
-        </div>
-        <div class="d-flex gap-2 align-items-center flex-wrap">
-          <span title="Sleep" class="badge {% if this_week_checkin.sleep_score >= 4 %}bg-success{% elif this_week_checkin.sleep_score >= 3 %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
-            <i class="bi bi-moon-stars me-1"></i>Sleep {{ this_week_checkin.sleep_score }}/5
-          </span>
-          <span title="Pain" class="badge {% if this_week_checkin.pain_score <= 2 %}bg-success{% elif this_week_checkin.pain_score == 3 %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
-            <i class="bi bi-{% if this_week_checkin.pain_score >= 4 %}fire{% else %}thermometer-half{% endif %} me-1"></i>Pain {{ this_week_checkin.pain_score }}/5
-          </span>
-          <span title="Mood" class="badge {% if this_week_checkin.mood_score >= 4 %}bg-success{% elif this_week_checkin.mood_score >= 3 %}bg-warning text-dark{% else %}bg-danger{% endif %} px-3 py-2">
-            <i class="bi bi-emoji-smile me-1"></i>Mood {{ this_week_checkin.mood_score }}/5
-          </span>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
   <!-- KPI Widgets -->
   <div class="row mb-4">
     <div class="col-lg-3 col-md-6 mb-3">
@@ -161,32 +113,6 @@
     </div>
   </div>
 
-  {% if has_wellness_history %}
-  <!-- Wellness Trend Chart -->
-  <div class="row mb-4">
-    <div class="col-12">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <h5 class="card-title mb-0">
-            <i class="bi bi-graph-up-arrow me-2"></i>Your Wellness Trend
-          </h5>
-          {% if show_wellness_prompt %}
-          <button class="btn btn-info btn-sm text-white" data-bs-toggle="modal" data-bs-target="#wellnessModal">
-            <i class="bi bi-clipboard2-heart me-1"></i>Check In Now
-          </button>
-          {% endif %}
-        </div>
-        <div class="card-body">
-          <canvas id="wellnessTrendChart" height="80"></canvas>
-          <div class="d-flex gap-4 justify-content-center mt-2 small text-muted">
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#0d6efd;" class="me-1"></span>Sleep</span>
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#dc3545;" class="me-1"></span>Pain</span>
-            <span><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:#198754;" class="me-1"></span>Mood</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
   {% endif %}
 
   <div class="row">
@@ -448,97 +374,6 @@
   </div>
 </div>
 
-{# ================================================================ #}
-{# WELLNESS CHECK-IN MODAL                                          #}
-{# ================================================================ #}
-{% if show_wellness_prompt %}
-<div class="modal fade" id="wellnessModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header" style="background: linear-gradient(135deg,#0dcaf0,#0d6efd); color:#fff;">
-        <h5 class="modal-title"><i class="bi bi-clipboard2-heart me-2"></i>Weekly Wellness Check-in</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post" action="{% url 'tracking:wellness_checkin_submit' %}">
-        {% csrf_token %}
-        <div class="modal-body">
-          <p class="text-muted small mb-4">Rate each area for the <strong>past week</strong>. Your responses are shared with the therapy team only.</p>
-
-          <!-- Sleep -->
-          <div class="mb-4">
-            <label class="form-label fw-semibold"><i class="bi bi-moon-stars me-1"></i>Sleep Quality</label>
-            <div class="d-flex gap-2 flex-wrap" id="sleep-group">
-              {% for i in "12345" %}
-              <div class="flex-fill text-center">
-                <input type="radio" class="btn-check" name="sleep_score" id="sleep{{ i }}" value="{{ i }}" required
-                       {% if i == "3" %}checked{% endif %}>
-                <label class="btn btn-outline-primary w-100" for="sleep{{ i }}">
-                  {{ i }}<br>
-                  <small class="d-block" style="font-size:10px;">
-                    {% if i == "1" %}Very Poor{% elif i == "2" %}Poor{% elif i == "3" %}OK{% elif i == "4" %}Good{% else %}Great{% endif %}
-                  </small>
-                </label>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <!-- Pain -->
-          <div class="mb-4">
-            <label class="form-label fw-semibold"><i class="bi bi-thermometer-half me-1"></i>Pain / Soreness Level</label>
-            <div class="d-flex gap-2 flex-wrap">
-              {% for i in "12345" %}
-              <div class="flex-fill text-center">
-                <input type="radio" class="btn-check" name="pain_score" id="pain{{ i }}" value="{{ i }}" required
-                       {% if i == "1" %}checked{% endif %}>
-                <label class="btn btn-outline-danger w-100" for="pain{{ i }}">
-                  {{ i }}<br>
-                  <small class="d-block" style="font-size:10px;">
-                    {% if i == "1" %}None{% elif i == "2" %}Mild{% elif i == "3" %}Moderate{% elif i == "4" %}High{% else %}Severe{% endif %}
-                  </small>
-                </label>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <!-- Mood -->
-          <div class="mb-4">
-            <label class="form-label fw-semibold"><i class="bi bi-emoji-smile me-1"></i>Mood / Mental Wellbeing</label>
-            <div class="d-flex gap-2 flex-wrap">
-              {% for i in "12345" %}
-              <div class="flex-fill text-center">
-                <input type="radio" class="btn-check" name="mood_score" id="mood{{ i }}" value="{{ i }}" required
-                       {% if i == "3" %}checked{% endif %}>
-                <label class="btn btn-outline-success w-100" for="mood{{ i }}">
-                  {{ i }}<br>
-                  <small class="d-block" style="font-size:10px;">
-                    {% if i == "1" %}Very Low{% elif i == "2" %}Low{% elif i == "3" %}OK{% elif i == "4" %}Good{% else %}Great{% endif %}
-                  </small>
-                </label>
-              </div>
-              {% endfor %}
-            </div>
-          </div>
-
-          <!-- Optional notes -->
-          <div class="mb-0">
-            <label class="form-label fw-semibold"><i class="bi bi-chat-left-dots me-1"></i>Any other notes? <span class="text-muted fw-normal">(optional)</span></label>
-            <textarea class="form-control" name="notes" rows="2"
-                      placeholder="e.g. soreness in left knee after Thursday practice..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Skip this week</button>
-          <button type="submit" class="btn btn-primary">
-            <i class="bi bi-check-circle me-1"></i>Submit Check-in
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -568,75 +403,6 @@
       });
     }
 
-    // Wellness trend chart
-    const trendCanvas = document.getElementById('wellnessTrendChart');
-    if (trendCanvas) {
-      const labels = {{ wellness_labels }};
-      const sleepData = {{ wellness_sleep }};
-      const painData  = {{ wellness_pain }};
-      const moodData  = {{ wellness_mood }};
-      new Chart(trendCanvas, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Sleep',
-              data: sleepData,
-              borderColor: '#0d6efd',
-              backgroundColor: 'rgba(13,110,253,0.1)',
-              tension: 0.3,
-              fill: false,
-              pointRadius: 5,
-              pointHoverRadius: 7,
-            },
-            {
-              label: 'Pain',
-              data: painData,
-              borderColor: '#dc3545',
-              backgroundColor: 'rgba(220,53,69,0.1)',
-              tension: 0.3,
-              fill: false,
-              pointRadius: 5,
-              pointHoverRadius: 7,
-            },
-            {
-              label: 'Mood',
-              data: moodData,
-              borderColor: '#198754',
-              backgroundColor: 'rgba(25,135,84,0.1)',
-              tension: 0.3,
-              fill: false,
-              pointRadius: 5,
-              pointHoverRadius: 7,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(ctx) {
-                  const labels = ['Very Poor/None', 'Poor/Mild', 'OK/Moderate', 'Good/High', 'Great/Severe'];
-                  return `${ctx.dataset.label}: ${ctx.parsed.y}/5 (${labels[ctx.parsed.y - 1] || ''})`;
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              min: 1,
-              max: 5,
-              ticks: { stepSize: 1 },
-              grid: { color: 'rgba(0,0,0,0.05)' },
-            },
-            x: { grid: { display: false } },
-          },
-        },
-      });
-    }
   });
 </script>
 {% endblock %}

@@ -23,6 +23,8 @@ body{
 /* Cards and widgets */
 .card{border:none;border-radius:.75rem;box-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -1px rgba(0,0,0,.06)}
 .card-header{background:linear-gradient(135deg,#f8fafc 0%,#e2e8f0 100%);border-bottom:1px solid #e2e8f0}
+/* Danger card headers keep light-gray background (overrides bg-danger) — fix text to dark for readability */
+.card-header.bg-danger,.card-header.bg-danger .card-title,.card-header.bg-danger i{color:#1f2937 !important}
 
 /* Primary buttons */
 .btn-primary{background:linear-gradient(135deg,var(--aims-blue) 0%,var(--aims-blue-dark) 100%);border:none;box-shadow:0 4px 14px 0 rgba(17,100,218,.39)}

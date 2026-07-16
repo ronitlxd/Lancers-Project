@@ -91,7 +91,7 @@
       <div class="card border-danger">
         <div class="card-header bg-danger text-white d-flex align-items-center">
           <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
-          <h5 class="card-title mb-0">Critical Alerts</h5>
+          <h5 class="card-title mb-0 text-white">Critical Alerts</h5>
           <span class="badge bg-white text-danger ms-2">{{ critical_count }}</span>
         </div>
         <div class="card-body p-0">
@@ -329,10 +329,10 @@
     </div>
   </div>
 
-  <!-- Injury Trend + Wellness Row -->
+  <!-- Injury Trend Row -->
   <div class="row mb-4">
     <!-- Monthly Injury Trend Chart -->
-    <div class="col-lg-8 mb-3 mb-lg-0">
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-header">
           <h5 class="card-title mb-0">
@@ -341,40 +341,12 @@
         </div>
         <div class="card-body">
           {% if monthly_counts != "[]" %}
-            <canvas id="trendChart" height="120"></canvas>
+            <canvas id="trendChart" height="80"></canvas>
           {% else %}
             <div class="text-center py-5 text-muted">
               <i class="bi bi-bar-chart-line" style="font-size:3rem;"></i>
               <p class="mt-2">No injury data in the last 6 months.</p>
             </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-
-    <!-- Wellness Participation -->
-    <div class="col-lg-4">
-      <div class="card h-100">
-        <div class="card-header">
-          <h5 class="card-title mb-0">
-            <i class="bi bi-heart-pulse me-2"></i>Wellness Check-ins ({{ wellness_week_label }})
-          </h5>
-        </div>
-        <div class="card-body d-flex flex-column justify-content-center align-items-center text-center">
-          <div style="position:relative; width:140px; height:140px;" class="mb-3">
-            <canvas id="wellnessDoughnut"></canvas>
-            <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);">
-              <div class="fw-bold fs-4">{{ wellness_pct }}%</div>
-              <div class="text-muted small">submitted</div>
-            </div>
-          </div>
-          <p class="mb-1"><strong>{{ wellness_this_week }}</strong> of <strong>{{ total_players_for_wellness }}</strong> players checked in.</p>
-          {% if wellness_pct >= 80 %}
-            <span class="badge bg-success mt-1">Great participation</span>
-          {% elif wellness_pct >= 50 %}
-            <span class="badge bg-warning text-dark mt-1">Moderate participation</span>
-          {% else %}
-            <span class="badge bg-danger mt-1">Low participation — follow up</span>
           {% endif %}
         </div>
       </div>
@@ -430,11 +402,11 @@
   <div class="row mb-4">
     <!-- Top Injured Athletes -->
     {% if top_injured %}
-    <div class="col-lg-6 mb-3 mb-lg-0">
+    <div class="col-12 mb-3 mb-lg-0">
       <div class="card h-100">
         <div class="card-header">
           <h5 class="card-title mb-0">
-            <i class="bi bi-trophy me-2 text-warning"></i>Most Injured Athletes
+            <i class="bi bi-person-x me-2 text-danger"></i>Most Injured Athletes
           </h5>
         </div>
         <div class="card-body p-0">
@@ -452,15 +424,7 @@
                 {% for player in top_injured %}
                 <tr>
                   <td class="ps-3">
-                    {% if forloop.counter == 1 %}
-                      <i class="bi bi-trophy-fill text-warning"></i>
-                    {% elif forloop.counter == 2 %}
-                      <i class="bi bi-trophy-fill text-secondary"></i>
-                    {% elif forloop.counter == 3 %}
-                      <i class="bi bi-trophy-fill" style="color:#cd7f32;"></i>
-                    {% else %}
-                      <span class="text-muted">{{ forloop.counter }}</span>
-                    {% endif %}
+                    <span class="text-muted">{{ forloop.counter }}</span>
                   </td>
                   <td>
                     <div class="d-flex align-items-center">
@@ -484,72 +448,6 @@
       </div>
     </div>
     {% endif %}
-
-    <!-- Athletes at Risk -->
-    <div class="{% if top_injured %}col-lg-6{% else %}col-12{% endif %}">
-      <div class="card h-100">
-        <div class="card-header d-flex align-items-center justify-content-between">
-          <h5 class="card-title mb-0">
-            <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Athletes at Risk
-          </h5>
-          <small class="text-muted">Pain ≥ 4 in latest wellness check-in</small>
-        </div>
-        <div class="card-body p-0">
-          {% if at_risk_list %}
-            <div class="table-responsive">
-              <table class="table table-hover align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th class="ps-3">Athlete</th>
-                    <th class="text-center">Pain</th>
-                    <th class="text-center">Sleep</th>
-                    <th class="text-center">Mood</th>
-                    <th class="pe-3">Checked In</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for checkin in at_risk_list %}
-                  <tr class="{% if checkin.pain_score >= 7 %}table-danger{% elif checkin.pain_score >= 5 %}table-warning{% endif %}">
-                    <td class="ps-3">
-                      <div class="d-flex align-items-center">
-                        <div class="bg-danger text-white rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0"
-                             style="width:32px;height:32px;font-size:12px;font-weight:600;">
-                          {{ checkin.player.first_name|first|upper }}{{ checkin.player.last_name|first|upper }}
-                        </div>
-                        <div>
-                          <div class="fw-semibold">{{ checkin.player.get_full_name }}</div>
-                          <small class="text-muted">{{ checkin.player.team.name|default:"—" }}</small>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge {% if checkin.pain_score >= 7 %}bg-danger{% elif checkin.pain_score >= 4 %}bg-warning text-dark{% else %}bg-success{% endif %}">
-                        {{ checkin.pain_score }}/5
-                      </span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-secondary">{{ checkin.sleep_score }}/5</span>
-                    </td>
-                    <td class="text-center">
-                      <span class="badge bg-secondary">{{ checkin.mood_score }}/5</span>
-                    </td>
-                    <td class="pe-3">
-                      <small class="text-muted">{{ checkin.submitted_at|date:"M d" }}</small>
-                    </td>
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% else %}
-            <div class="text-center py-4 text-muted">
-              <i class="bi bi-shield-check fs-2 d-block mb-2 text-success"></i>
-              No athletes reporting high pain this week.
-            </div>
-          {% endif %}
-        </div>
-      </div>
-    </div>
   </div>
 
 </div>
@@ -584,28 +482,6 @@
   }
   {% endif %}
 
-  const doughnutCtx = document.getElementById('wellnessDoughnut');
-  if (doughnutCtx) {
-    const pct = {{ wellness_pct }};
-    new Chart(doughnutCtx, {
-      type: 'doughnut',
-      data: {
-        datasets: [{
-          data: [pct, 100 - pct],
-          backgroundColor: [
-            pct >= 80 ? '#10b981' : pct >= 50 ? '#ffc72c' : '#ef4444',
-            '#e5e7eb'
-          ],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        cutout: '75%',
-        responsive: true,
-        plugins: { legend: { display: false }, tooltip: { enabled: false } }
-      }
-    });
-  }
 </script>
 {% endblock %}
     

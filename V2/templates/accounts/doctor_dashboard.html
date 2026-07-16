@@ -224,26 +224,7 @@
   </div>
   {% endif %}
 
-  <!-- High-Pain Alert Banner -->
-  {% if high_pain_patients %}
-  <div class="row mb-3">
-    <div class="col-12">
-      <div class="alert alert-danger d-flex align-items-center mb-0" style="border-left: 4px solid #dc3545;">
-        <i class="bi bi-fire me-3" style="font-size:1.5rem;"></i>
-        <div>
-          <strong>High Pain Alert</strong> —
-          {% if high_pain_patients|length == 1 %}
-            {{ high_pain_patients.0.injury.player.get_full_name }} is reporting pain level {{ high_pain_patients.0.wellness.pain_score }}/5. Immediate attention recommended.
-          {% else %}
-            {{ high_pain_patients|length }} patients are reporting pain levels of 4–5. Review highlighted rows below.
-          {% endif %}
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endif %}
-
-  <!-- Recent Injuries with Wellness Snapshot -->
+  <!-- Active Patients -->
   <div class="row mb-3 mb-md-4">
     <div class="col-12">
       <div class="card">
@@ -251,14 +232,13 @@
           <h5 class="card-title mb-0">
             <i class="bi bi-clock-history me-2"></i>Active Patients
             {% if active_patients %}<span class="badge bg-secondary ms-2">{{ active_patients }}</span>{% endif %}
-            {% if high_pain_patients %}<span class="badge bg-danger ms-1"><i class="bi bi-fire me-1"></i>{{ high_pain_patients|length }} high pain</span>{% endif %}
           </h5>
           <a href="{% url 'tracking:injury_list' %}" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-arrow-right me-1"></i>View All
           </a>
         </div>
         <div class="card-body">
-          {% if recent_injuries_with_wellness %}
+          {% if recent_injuries %}
             <div class="table-responsive">
               <table class="table table-hover">
                 <thead>
@@ -268,14 +248,12 @@
                     <th>Severity</th>
                     <th>Status</th>
                     <th>Date</th>
-                    <th title="Most recent wellness check-in scores: Sleep / Pain / Mood">Last Wellness</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {% for row in recent_injuries_with_wellness %}
-                  {% with injury=row.injury w=row.wellness %}
-                  <tr {% if w and w.pain_score >= 4 %}class="table-danger"{% endif %}>
+                  {% for injury in recent_injuries %}
+                  <tr>
                     <td>
                       <div class="d-flex align-items-center">
                         <div class="avatar-sm bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center">
@@ -307,24 +285,6 @@
                     </td>
                     <td>{{ injury.injury_date|date:"M d, Y" }}</td>
                     <td>
-                      {% if w %}
-                        <div class="d-flex gap-2 flex-nowrap align-items-center">
-                          <span title="Sleep" class="badge {% if w.sleep_score >= 4 %}bg-success{% elif w.sleep_score >= 3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                            <i class="bi bi-moon-stars me-1"></i>{{ w.sleep_score }}
-                          </span>
-                          <span title="Pain" class="badge {% if w.pain_score <= 2 %}bg-success{% elif w.pain_score == 3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                            {% if w.pain_score >= 4 %}<i class="bi bi-fire me-1"></i>{% else %}<i class="bi bi-thermometer-half me-1"></i>{% endif %}{{ w.pain_score }}
-                          </span>
-                          <span title="Mood" class="badge {% if w.mood_score >= 4 %}bg-success{% elif w.mood_score >= 3 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                            <i class="bi bi-emoji-smile me-1"></i>{{ w.mood_score }}
-                          </span>
-                        </div>
-                        <small class="text-muted d-block mt-1">{{ w.submitted_at|date:"M d" }}</small>
-                      {% else %}
-                        <span class="text-muted small">No check-in</span>
-                      {% endif %}
-                    </td>
-                    <td>
                       <div class="btn-group" role="group">
                         <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-primary btn-sm">
                           <i class="bi bi-eye me-1"></i>View
@@ -339,7 +299,6 @@
                       </div>
                     </td>
                   </tr>
-                  {% endwith %}
                   {% endfor %}
                 </tbody>
               </table>
