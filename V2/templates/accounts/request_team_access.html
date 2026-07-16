@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block title %}Request Team Access - LancersPulse{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body d-flex align-items-center">
+          <div class="widget-icon primary me-3">
+            <i class="bi bi-person-check"></i>
+          </div>
+          <div>
+            <h1 class="card-title mb-1">Request Team Access</h1>
+            <p class="text-muted mb-0">Submit a request for admin approval to view additional team data</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-7">
+      <!-- Request Form -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-send me-2"></i>New Request
+          </h5>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">{{ form.team.label }} <span class="text-danger">*</span></label>
+                {{ form.team }}
+                {% if form.team.errors %}
+                  <div class="text-danger small mt-1">{{ form.team.errors.0 }}</div>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-semibold">{{ form.role_scope.label }} <span class="text-danger">*</span></label>
+                {{ form.role_scope }}
+                {% if form.role_scope.errors %}
+                  <div class="text-danger small mt-1">{{ form.role_scope.errors.0 }}</div>
+                {% endif %}
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-semibold">{{ form.justification.label }}</label>
+                {{ form.justification }}
+                <div class="form-text">Briefly explain why you need access to this team's data.</div>
+                {% if form.justification.errors %}
+                  <div class="text-danger small mt-1">{{ form.justification.errors.0 }}</div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="mt-4">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-send me-2"></i>Submit Request
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <!-- Info sidebar -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-info-circle me-2"></i>How it works
+          </h5>
+        </div>
+        <div class="card-body">
+          <ul class="list-unstyled small mb-0">
+            <li class="mb-2"><i class="bi bi-1-circle text-primary me-2"></i>Submit a request for the team you need access to</li>
+            <li class="mb-2"><i class="bi bi-2-circle text-primary me-2"></i>An administrator reviews and approves or denies the request</li>
+            <li class="mb-0"><i class="bi bi-3-circle text-primary me-2"></i>Once approved, you can view that team's injury data</li>
+          </ul>
+          <div class="alert alert-info small mb-0 mt-3">
+            <i class="bi bi-shield-check me-1"></i>Access is limited to view-only and respects all confidentiality settings.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- My Requests -->
+  <div class="card">
+    <div class="card-header">
+      <h5 class="card-title mb-0">
+        <i class="bi bi-clock-history me-2"></i>My Requests
+      </h5>
+    </div>
+    <div class="card-body p-0">
+      {% if my_requests %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Role Scope</th>
+                <th>Status</th>
+                <th>Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in my_requests %}
+                <tr>
+                  <td><span class="badge bg-light text-dark border">{{ r.team.name }}</span></td>
+                  <td>{{ r.get_role_scope_display }}</td>
+                  <td>
+                    <span class="badge
+                      {% if r.status == 'APPROVED' %}bg-success
+                      {% elif r.status == 'DENIED' %}bg-danger
+                      {% else %}bg-warning text-dark{% endif %}">
+                      {{ r.status|title }}
+                    </span>
+                  </td>
+                  <td><small class="text-muted">{{ r.created_at|date:"M d, Y" }}</small></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-4 text-muted">
+          <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+          No requests yet.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
