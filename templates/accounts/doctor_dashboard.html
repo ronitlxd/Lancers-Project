@@ -1,0 +1,454 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Doctor Dashboard - LancersPulse{% endblock %}
+
+{% block content %}
+  <!-- Header -->
+  <div class="row mb-3 mb-md-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="widget-icon primary me-3 flex-shrink-0">
+              <i class="bi bi-heart-pulse-fill"></i>
+            </div>
+            <div class="flex-grow-1">
+              <h1 class="card-title mb-1">Medical Dashboard</h1>
+              <p class="text-muted mb-0">Injury management and medical oversight</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Stats -->
+  <div class="row mb-3 mb-md-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon warning me-3 flex-shrink-0">
+            <i class="bi bi-clock-fill"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h3 class="mb-1">{{ recent_injuries|length }}</h3>
+            <p class="text-muted mb-0">Recent Injuries</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon danger me-3 flex-shrink-0">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h3 class="mb-1">{{ follow_ups_due|length }}</h3>
+            <p class="text-muted mb-0">Follow-ups Due</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon info me-3 flex-shrink-0">
+            <i class="bi bi-clipboard-check-fill"></i>
+          </div>
+          <div class="flex-grow-1">
+            <h3 class="mb-1">{{ pending_clearances|length }}</h3>
+            <p class="text-muted mb-0">Pending Clearances</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center flex-column flex-md-row">
+          <div class="widget-icon success me-0 me-md-3 mb-2 mb-md-0 flex-shrink-0">
+            <i class="bi bi-plus-circle-fill"></i>
+          </div>
+          <div class="w-100">
+            <a href="{% url 'tracking:injury_create' %}" class="btn btn-success w-100">
+              <i class="bi bi-plus me-2"></i>Report Injury
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Follow-ups Due -->
+  {% if follow_ups_due %}
+  <div class="row mb-3 mb-md-4">
+    <div class="col-12">
+      <div class="card border-warning">
+        <div class="card-header bg-warning text-dark">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-clock-fill me-2"></i>Follow-ups Due
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Injury</th>
+                  <th>Follow-up Date</th>
+                  <th>Days Overdue</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for injury in follow_ups_due %}
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="avatar-sm bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center">
+                        {{ injury.player.first_name|first|upper }}{{ injury.player.last_name|first|upper }}
+                      </div>
+                      <div>
+                        <div class="fw-bold">{{ injury.player.get_full_name }}</div>
+                        <small class="text-muted">{{ injury.player.team.name }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div>
+                      <div class="fw-bold">{{ injury.injury_type.name }}</div>
+                      <small class="text-muted">{{ injury.body_part.name }}</small>
+                    </div>
+                  </td>
+                  <td>{{ injury.follow_up_date|date:"M d, Y" }}</td>
+                  <td>
+                    <span class="badge bg-danger">
+                      {{ injury.follow_up_date|timesince }} overdue
+                    </span>
+                  </td>
+                  <td>
+                    <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-primary btn-sm">
+                      <i class="bi bi-eye me-1"></i>Review
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Pending Clearances -->
+  {% if pending_clearances %}
+  <div class="row mb-3 mb-md-4">
+    <div class="col-12">
+      <div class="card border-info">
+        <div class="card-header bg-info text-white">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-clipboard-check-fill me-2"></i>Pending Medical Clearances
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-hover">
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Injury</th>
+                  <th>Recovery Status</th>
+                  <th>Days Since Injury</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for injury in pending_clearances %}
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="avatar-sm bg-success text-white rounded-circle me-2 d-flex align-items-center justify-content-center">
+                        {{ injury.player.first_name|first|upper }}{{ injury.player.last_name|first|upper }}
+                      </div>
+                      <div>
+                        <div class="fw-bold">{{ injury.player.get_full_name }}</div>
+                        <small class="text-muted">{{ injury.player.team.name }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <div>
+                      <div class="fw-bold">
+                        {{ injury.injury_type.name }}
+                        {% if injury.is_recurrence %}
+                          <span class="badge bg-warning text-dark ms-1" title="Recurrence">
+                            <i class="bi bi-arrow-repeat"></i>
+                          </span>
+                        {% endif %}
+                      </div>
+                      <small class="text-muted">{{ injury.body_part.name }}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="status-badge status-{{ injury.status|lower }}">
+                      {{ injury.get_status_display }}
+                    </span>
+                  </td>
+                  <td>{{ injury.days_since_injury }} days</td>
+                  <td>
+                    <div class="btn-group" role="group">
+                      <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-eye me-1"></i>Review
+                      </a>
+                      <button class="btn btn-success btn-sm"
+                              onclick="openClearModal({{ injury.pk }}, '{{ injury.player.get_full_name }}')">
+                        <i class="bi bi-check-circle me-1"></i>Clear
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Active Patients -->
+  <div class="row mb-3 mb-md-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-clock-history me-2"></i>Active Patients
+            {% if active_patients %}<span class="badge bg-secondary ms-2">{{ active_patients }}</span>{% endif %}
+          </h5>
+          <a href="{% url 'tracking:injury_list' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-right me-1"></i>View All
+          </a>
+        </div>
+        <div class="card-body">
+          {% if recent_injuries %}
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Injury</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for injury in recent_injuries %}
+                  <tr>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="avatar-sm bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center">
+                          {{ injury.player.first_name|first|upper }}{{ injury.player.last_name|first|upper }}
+                        </div>
+                        <div>
+                          <div class="fw-bold">{{ injury.player.get_full_name }}</div>
+                          <small class="text-muted">{{ injury.player.team.name }}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="fw-semibold">{{ injury.injury_type.name }}</div>
+                      <small class="text-muted">{{ injury.body_part.name }}
+                        {% if injury.is_recurrence %}
+                          <span class="badge bg-warning text-dark ms-1"><i class="bi bi-arrow-repeat"></i></span>
+                        {% endif %}
+                      </small>
+                    </td>
+                    <td>
+                      <span class="badge" style="background-color: {{ injury.severity.color_code }}; color: white;">
+                        {{ injury.severity.name }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="status-badge status-{{ injury.status|lower }}">
+                        {{ injury.get_status_display }}
+                      </span>
+                    </td>
+                    <td>{{ injury.injury_date|date:"M d, Y" }}</td>
+                    <td>
+                      <div class="btn-group" role="group">
+                        <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-primary btn-sm">
+                          <i class="bi bi-eye me-1"></i>View
+                        </a>
+                        <a href="{% url 'tracking:injury_update' injury.pk %}" class="btn btn-outline-warning btn-sm">
+                          <i class="bi bi-pencil me-1"></i>Update
+                        </a>
+                        <button class="btn btn-outline-success btn-sm"
+                                onclick="openFollowUpModal({{ injury.pk }}, '{{ injury.player.get_full_name }}')">
+                          <i class="bi bi-journal-plus"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="text-center py-4">
+              <i class="bi bi-clipboard-data text-muted" style="font-size: 3rem;"></i>
+              <p class="text-muted mt-2">No active patients</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-lightning-fill me-2"></i>Quick Actions
+          </h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-lg-3 col-md-6 mb-3">
+              <a href="{% url 'tracking:injury_create' %}" class="btn btn-primary w-100">
+                <i class="bi bi-plus-circle me-2"></i>Report New Injury
+              </a>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+              <a href="{% url 'tracking:injury_list' %}" class="btn btn-info w-100">
+                <i class="bi bi-clipboard-data me-2"></i>View All Injuries
+              </a>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+              <a href="{% url 'tracking:analytics' %}" class="btn btn-warning w-100">
+                <i class="bi bi-graph-up me-2"></i>Medical Analytics
+              </a>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+              <a href="{% url 'profile' %}" class="btn btn-outline-secondary w-100">
+                <i class="bi bi-person me-2"></i>My Profile
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clearance Modal -->
+  <div class="modal fade" id="clearanceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title"><i class="bi bi-check-circle me-2"></i>Medical Clearance</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="clearanceForm" method="post" action="">
+          {% csrf_token %}
+          <div class="modal-body">
+            <p class="mb-3">
+              You are clearing <strong id="clearancePlayerName"></strong> for return to play.
+              This action will be recorded and cannot be undone.
+            </p>
+            <div class="mb-3">
+              <label for="clearanceNote" class="form-label fw-semibold">
+                Clearance Note <span class="text-danger">*</span>
+              </label>
+              <textarea id="clearanceNote" name="clearance_note" class="form-control" rows="4"
+                        placeholder="Describe the clinical basis for this clearance (e.g. full ROM restored, pain-free, passed return-to-play protocol)..."
+                        required></textarea>
+              <div class="form-text">Required — this note is saved as part of the medical record.</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-check-circle me-1"></i>Confirm Clearance
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Follow-up Modal -->
+  <div class="modal fade" id="followUpModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title"><i class="bi bi-journal-plus me-2"></i>Log Follow-up</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form id="followUpForm" method="post" action="">
+          {% csrf_token %}
+          <div class="modal-body">
+            <p class="mb-3">Logging follow-up for <strong id="followUpPlayerName"></strong>.</p>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Notes <span class="text-danger">*</span></label>
+              <textarea name="notes" class="form-control" rows="4"
+                        placeholder="Assessment findings, treatment provided, next steps..." required></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Status Update</label>
+              <select name="status_update" class="form-select">
+                <option value="ACTIVE">Still Active</option>
+                <option value="RECOVERING">Recovering</option>
+                <option value="RECOVERED">Recovered</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-check-circle me-1"></i>Save Follow-up
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function openClearModal(injuryId, playerName) {
+    document.getElementById('clearancePlayerName').textContent = playerName;
+    document.getElementById('clearanceNote').value = '';
+    document.getElementById('clearanceForm').action = '/tracking/injuries/' + injuryId + '/recover/';
+    new bootstrap.Modal(document.getElementById('clearanceModal')).show();
+  }
+
+  function openFollowUpModal(injuryId, playerName) {
+    document.getElementById('followUpPlayerName').textContent = playerName;
+    document.getElementById('followUpForm').action = '/tracking/injuries/' + injuryId + '/follow-up/';
+    document.getElementById('followUpForm').reset();
+    new bootstrap.Modal(document.getElementById('followUpModal')).show();
+  }
+</script>
+
+<style>
+  .avatar-sm {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+</style>
+{% endblock %}

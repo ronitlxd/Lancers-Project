@@ -1,0 +1,487 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Admin Dashboard - LancersPulse{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center">
+            <div class="widget-icon primary me-3">
+              <i class="bi bi-gear-fill"></i>
+            </div>
+            <div>
+              <h1 class="card-title mb-1">Admin Dashboard</h1>
+              <p class="text-muted mb-0">Comprehensive overview of the injury tracking system</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Injuries Summary -->
+  <div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon primary me-3">
+            <i class="bi bi-people-fill"></i>
+          </div>
+          <div>
+            <h3 class="mb-1">{{ total_players }}</h3>
+            <p class="text-muted mb-0">Total Players</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon danger me-3">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+          </div>
+          <div>
+            <h3 class="mb-1">{{ total_injuries }}</h3>
+            <p class="text-muted mb-0">Total Injuries</p>
+            <small class="text-muted">All statuses included</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon warning me-3">
+            <i class="bi bi-clock-fill"></i>
+          </div>
+          <div>
+            <h3 class="mb-1">{{ active_injuries }}</h3>
+            <p class="text-muted mb-0">Active Injuries</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-3 col-md-6 mb-3">
+      <div class="widget">
+        <div class="d-flex align-items-center">
+          <div class="widget-icon success me-3">
+            <i class="bi bi-check-circle-fill"></i>
+          </div>
+          <div>
+            <h3 class="mb-1">{{ recovered_injuries }}</h3>
+            <p class="text-muted mb-0">Recovered</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Critical Alerts -->
+  {% if critical_severe or critical_long_term %}
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card border-danger">
+        <div class="card-header bg-danger text-white d-flex align-items-center">
+          <i class="bi bi-exclamation-octagon-fill me-2 fs-5"></i>
+          <h5 class="card-title mb-0 text-white">Critical Alerts</h5>
+          <span class="badge bg-white text-danger ms-2">{{ critical_count }}</span>
+        </div>
+        <div class="card-body p-0">
+          {% if critical_severe %}
+          <div class="px-3 pt-3 pb-1">
+            <h6 class="text-danger fw-bold"><i class="bi bi-fire me-1"></i>Severe Injuries — Last 7 Days</h6>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">Player</th>
+                  <th>Injury</th>
+                  <th>Body Part</th>
+                  <th>Date</th>
+                  <th class="pe-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for injury in critical_severe %}
+                <tr>
+                  <td class="ps-3">
+                    <div class="d-flex align-items-center">
+                      <div class="avatar-sm bg-danger text-white rounded-circle me-2 flex-shrink-0 d-flex align-items-center justify-content-center">
+                        {{ injury.player.first_name|first|upper }}{{ injury.player.last_name|first|upper }}
+                      </div>
+                      <div>
+                        <div class="fw-bold">{{ injury.player.get_full_name }}</div>
+                        <small class="text-muted">{{ injury.player.team.name }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ injury.injury_type.name }}</td>
+                  <td>{{ injury.body_part.name }}</td>
+                  <td>{{ injury.injury_date|date:"M d, Y" }}</td>
+                  <td class="pe-3">
+                    <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-danger btn-sm">
+                      <i class="bi bi-eye me-1"></i>Review
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+
+          {% if critical_long_term %}
+          <div class="px-3 pt-3 pb-1 {% if critical_severe %}border-top{% endif %}">
+            <h6 class="text-warning fw-bold"><i class="bi bi-hourglass-split me-1"></i>Long-Term Absences — 30+ Days Out</h6>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">Player</th>
+                  <th>Injury</th>
+                  <th>Status</th>
+                  <th>Days Out</th>
+                  <th class="pe-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for injury in critical_long_term %}
+                <tr>
+                  <td class="ps-3">
+                    <div class="d-flex align-items-center">
+                      <div class="avatar-sm bg-warning text-dark rounded-circle me-2 flex-shrink-0 d-flex align-items-center justify-content-center">
+                        {{ injury.player.first_name|first|upper }}{{ injury.player.last_name|first|upper }}
+                      </div>
+                      <div>
+                        <div class="fw-bold">{{ injury.player.get_full_name }}</div>
+                        <small class="text-muted">{{ injury.player.team.name }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ injury.injury_type.name }} — {{ injury.body_part.name }}</td>
+                  <td>
+                    <span class="status-badge status-{{ injury.status|lower }}">{{ injury.get_status_display }}</span>
+                  </td>
+                  <td>
+                    <span class="badge bg-warning text-dark">{{ injury.days_since_injury }} days</span>
+                  </td>
+                  <td class="pe-3">
+                    <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-warning btn-sm">
+                      <i class="bi bi-eye me-1"></i>Review
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Roster Availability Grid -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-person-check-fill me-2"></i>Roster Availability — This Week
+          </h5>
+          <small class="text-muted">
+            <span class="badge bg-success me-1">●</span>≥80%
+            <span class="badge bg-warning text-dark ms-2 me-1">●</span>60–79%
+            <span class="badge bg-danger ms-2 me-1">●</span>&lt;60%
+          </small>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            {% for ts in team_stats %}
+            <div class="col-xl-4 col-lg-6">
+              <div class="card border-{{ ts.availability_color }} h-100">
+                <div class="card-body pb-2">
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <h6 class="fw-bold mb-0">{{ ts.team.name }}</h6>
+                      <small class="text-muted">{{ ts.team.get_gender_display }} Team</small>
+                    </div>
+                    <span class="badge bg-{{ ts.availability_color }} fs-6 px-3 py-2">
+                      {{ ts.availability_pct }}%
+                    </span>
+                  </div>
+                  <div class="progress mb-2" style="height: 10px;">
+                    <div class="progress-bar bg-{{ ts.availability_color }}"
+                         role="progressbar"
+                         style="width: {{ ts.availability_pct }}%"
+                         aria-valuenow="{{ ts.availability_pct }}"
+                         aria-valuemin="0" aria-valuemax="100">
+                    </div>
+                  </div>
+                  <div class="d-flex justify-content-between small text-muted">
+                    <span><i class="bi bi-person-check text-success me-1"></i>{{ ts.available }} available</span>
+                    <span><i class="bi bi-person-x text-danger me-1"></i>{{ ts.unavailable }} out</span>
+                    <span><i class="bi bi-people me-1"></i>{{ ts.players }} total</span>
+                  </div>
+                </div>
+                <div class="card-footer bg-transparent border-top pt-1 pb-2">
+                  <small class="text-muted">
+                    <span class="text-danger fw-semibold">{{ ts.active_injuries }}</span> active &nbsp;·&nbsp;
+                    <span class="text-warning fw-semibold">{{ ts.recovering_injuries }}</span> recovering &nbsp;·&nbsp;
+                    <span>{{ ts.total_injuries }}</span> total
+                  </small>
+                </div>
+              </div>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center py-4 text-muted">No teams found.</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Injuries (5 most recent) -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-clock-history me-2"></i>Recent Injury Reports
+            <small class="text-muted ms-2">(5 most recent)</small>
+          </h5>
+          <a href="{% url 'tracking:injury_list' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-arrow-right me-1"></i>View All
+          </a>
+        </div>
+        <div class="card-body">
+          {% if recent_injuries %}
+            <div class="table-responsive">
+              <table class="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Injury Type</th>
+                    <th>Body Part</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for injury in recent_injuries|slice:":5" %}
+                  <tr>
+                    <td>
+                      <div class="d-flex align-items-center">
+                        <div class="avatar-sm bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center">
+                          {{ injury.player.first_name|first|upper }}{{ injury.player.last_name|first|upper }}
+                        </div>
+                        <div>
+                          <div class="fw-bold">{{ injury.player.get_full_name }}</div>
+                          <small class="text-muted">{{ injury.player.team.name }}</small>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{{ injury.injury_type.name }}</td>
+                    <td>{{ injury.body_part.name }}</td>
+                    <td>
+                      <span class="badge" style="background-color: {{ injury.severity.color_code }}; color: white;">
+                        {{ injury.severity.name }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="status-badge status-{{ injury.status|lower }}">
+                        {{ injury.get_status_display }}
+                      </span>
+                    </td>
+                    <td>{{ injury.injury_date|date:"M d, Y" }}</td>
+                    <td>
+                      <a href="{% url 'tracking:injury_detail' injury.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-eye me-1"></i>View
+                      </a>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <div class="text-center py-4">
+              <i class="bi bi-clipboard-data text-muted" style="font-size: 3rem;"></i>
+              <p class="text-muted mt-2">No recent injuries found</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Injury Trend Row -->
+  <div class="row mb-4">
+    <!-- Monthly Injury Trend Chart -->
+    <div class="col-12">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-graph-up me-2"></i>Injury Trend — {{ trend_label }}
+          </h5>
+        </div>
+        <div class="card-body">
+          {% if monthly_counts != "[]" %}
+            <canvas id="trendChart" height="80"></canvas>
+          {% else %}
+            <div class="text-center py-5 text-muted">
+              <i class="bi bi-bar-chart-line" style="font-size:3rem;"></i>
+              <p class="mt-2">No injury data in the last 6 months.</p>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="card-title mb-0"><i class="bi bi-lightning-fill me-2"></i>Quick Actions</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-2">
+            <div class="col-lg-2 col-md-4 col-6">
+              <a href="{% url 'tracking:injury_create' %}" class="btn btn-primary w-100">
+                <i class="bi bi-plus-circle me-2"></i>Report Injury
+              </a>
+            </div>
+            <div class="col-lg-2 col-md-4 col-6">
+              <a href="{% url 'tracking:analytics' %}" class="btn btn-warning w-100">
+                <i class="bi bi-graph-up me-2"></i>Analytics
+              </a>
+            </div>
+            <div class="col-lg-2 col-md-4 col-6">
+              <a href="{% url 'tracking:injury_list' %}" class="btn btn-info w-100">
+                <i class="bi bi-clipboard-data me-2"></i>All Injuries
+              </a>
+            </div>
+            <div class="col-lg-2 col-md-4 col-6">
+              <a href="{% url 'admin_review_requests' %}" class="btn btn-outline-secondary w-100">
+                <i class="bi bi-inboxes me-2"></i>Team Requests
+              </a>
+            </div>
+            <div class="col-lg-2 col-md-4 col-6">
+              <a href="{% url 'tracking:appointment_inbox' %}" class="btn btn-outline-secondary w-100">
+                <i class="bi bi-calendar-check me-2"></i>Appointments
+              </a>
+            </div>
+            <div class="col-lg-2 col-md-4 col-6">
+              <a href="/admin/" class="btn btn-outline-dark w-100">
+                <i class="bi bi-gear me-2"></i>Django Admin
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Injured + At Risk Row -->
+  <div class="row mb-4">
+    <!-- Top Injured Athletes -->
+    {% if top_injured %}
+    <div class="col-12 mb-3 mb-lg-0">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="card-title mb-0">
+            <i class="bi bi-person-x me-2 text-danger"></i>Most Injured Athletes
+          </h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th class="ps-3">#</th>
+                  <th>Athlete</th>
+                  <th>Team</th>
+                  <th class="text-center pe-3">Injuries</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for player in top_injured %}
+                <tr>
+                  <td class="ps-3">
+                    <span class="text-muted">{{ forloop.counter }}</span>
+                  </td>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0"
+                           style="width:32px;height:32px;font-size:12px;font-weight:600;">
+                        {{ player.first_name|first|upper }}{{ player.last_name|first|upper }}
+                      </div>
+                      <span class="fw-semibold">{{ player.get_full_name }}</span>
+                    </div>
+                  </td>
+                  <td><small class="text-muted">{{ player.team.name|default:"—" }}</small></td>
+                  <td class="text-center pe-3">
+                    <span class="badge bg-danger">{{ player.injury_count }}</span>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+  {% if monthly_counts != "[]" %}
+  const trendCtx = document.getElementById('trendChart');
+  if (trendCtx) {
+    new Chart(trendCtx, {
+      type: 'bar',
+      data: {
+        labels: {{ monthly_labels|safe }},
+        datasets: [{
+          label: 'Injuries',
+          data: {{ monthly_counts|safe }},
+          backgroundColor: 'rgba(11, 118, 239, 0.7)',
+          borderColor: 'rgba(11, 118, 239, 1)',
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+      }
+    });
+  }
+  {% endif %}
+
+</script>
+{% endblock %}
+    

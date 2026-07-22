@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block title %}Team Access Requests - LancersPulse{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center">
+            <div class="widget-icon warning me-3">
+              <i class="bi bi-inboxes"></i>
+            </div>
+            <div>
+              <h1 class="card-title mb-1">Team Access Requests</h1>
+              <p class="text-muted mb-0">Review and approve coach/doctor requests to access team data</p>
+            </div>
+          </div>
+          {% if pending %}
+          <span class="badge bg-warning text-dark fs-6">{{ pending|length }} pending</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body {% if not pending %}p-0{% endif %}">
+      {% if pending %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Team</th>
+                <th>Role Scope</th>
+                <th>Justification</th>
+                <th>Submitted</th>
+                <th class="text-end">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in pending %}
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="bg-primary text-white rounded-circle me-2 d-flex align-items-center justify-content-center"
+                           style="width:36px;height:36px;font-size:13px;font-weight:600;flex-shrink:0;">
+                        {{ r.user.first_name|first|upper }}{{ r.user.last_name|first|upper }}
+                      </div>
+                      <div>
+                        <div class="fw-semibold">{{ r.user.get_full_name|default:r.user.username }}</div>
+                        <small class="text-muted">{{ r.user.get_role_display }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="badge bg-light text-dark border">{{ r.team.name }}</span></td>
+                  <td>{{ r.get_role_scope_display }}</td>
+                  <td style="max-width:320px;white-space:normal;">
+                    <small>{{ r.justification|default:'—' }}</small>
+                  </td>
+                  <td>
+                    <small class="text-muted">
+                      {{ r.created_at|date:"M d, Y" }}<br>
+                      {{ r.created_at|date:"g:i A" }}
+                    </small>
+                  </td>
+                  <td class="text-end">
+                    <form method="post" action="{% url 'admin_decide_request' r.id 'approve' %}" class="d-inline">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-success me-1">
+                        <i class="bi bi-check2 me-1"></i>Approve
+                      </button>
+                    </form>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-danger deny-btn"
+                            data-id="{{ r.id }}"
+                            data-user="{{ r.user.get_full_name|default:r.user.username }}"
+                            data-team="{{ r.team.name }}">
+                      <i class="bi bi-x me-1"></i>Deny
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+          <h5 class="text-muted">No pending requests</h5>
+          <p class="small mb-0">When coaches or doctors request team access, they'll appear here for your review.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Deny Confirmation Modal -->
+<div class="modal fade" id="denyModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title"><i class="bi bi-x-circle me-2"></i>Deny Access Request</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Deny <strong id="denyUserName"></strong>'s request to access <strong id="denyTeamName"></strong>?</p>
+        <p class="text-muted small mb-0">
+          <i class="bi bi-info-circle me-1"></i>The user will not gain access to this team's data.
+        </p>
+      </div>
+      <form method="post" id="denyForm" action="">
+        {% csrf_token %}
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bi bi-x-circle me-1"></i>Yes, Deny Request
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const denyBaseUrl = "{% url 'admin_decide_request' 0 'deny' %}";
+    document.querySelectorAll('.deny-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        document.getElementById('denyUserName').textContent = btn.dataset.user;
+        document.getElementById('denyTeamName').textContent = btn.dataset.team;
+        document.getElementById('denyForm').action = denyBaseUrl.replace('/0/', '/' + btn.dataset.id + '/');
+        new bootstrap.Modal(document.getElementById('denyModal')).show();
+      });
+    });
+  });
+</script>
+{% endblock %}

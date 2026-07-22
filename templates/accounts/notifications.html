@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Notifications — LancersPulse{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <!-- Header -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body d-flex align-items-center justify-content-between">
+          <div class="d-flex align-items-center">
+            <div class="widget-icon primary me-3">
+              <i class="bi bi-bell"></i>
+            </div>
+            <div>
+              <h1 class="card-title mb-1">Notifications</h1>
+              {% if unread_count > 0 %}
+                <p class="text-muted mb-0">{{ unread_count }} unread &mdash; marked as read on visit</p>
+              {% else %}
+                <p class="text-muted mb-0">All caught up!</p>
+              {% endif %}
+            </div>
+          </div>
+          <form method="post" action="{% url 'mark_all_notifications_read' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-check2-all me-1"></i>Mark all read
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-8">
+
+    {% if page_obj.object_list %}
+      <div class="card shadow-sm border-0">
+        <div class="list-group list-group-flush rounded">
+          {% for notif in page_obj %}
+            <div class="list-group-item list-group-item-action border-bottom py-3">
+              <div class="d-flex align-items-start gap-3">
+                <!-- Icon -->
+                <div class="flex-shrink-0 mt-1">
+                  {% if notif.notification_type == 'INJURY' %}
+                    <i class="bi bi-bandaid fs-5 text-danger"></i>
+                  {% elif notif.notification_type == 'APPOINTMENT' %}
+                    <i class="bi bi-calendar-check fs-5 text-primary"></i>
+                  {% elif notif.notification_type == 'CLEARANCE' %}
+                    <i class="bi bi-check-circle fs-5 text-success"></i>
+                  {% elif notif.notification_type == 'EVENT' %}
+                    <i class="bi bi-calendar-event fs-5 text-warning"></i>
+                  {% else %}
+                    <i class="bi bi-bell fs-5 text-secondary"></i>
+                  {% endif %}
+                </div>
+
+                <!-- Body -->
+                <div class="flex-grow-1">
+                  <div class="d-flex justify-content-between align-items-start">
+                    <p class="mb-1 small">{{ notif.message }}</p>
+                    <span class="badge bg-{% if notif.notification_type == 'INJURY' %}danger{% elif notif.notification_type == 'APPOINTMENT' %}primary{% elif notif.notification_type == 'CLEARANCE' %}success{% elif notif.notification_type == 'EVENT' %}warning{% else %}secondary{% endif %} ms-2 flex-shrink-0">
+                      {{ notif.get_notification_type_display }}
+                    </span>
+                  </div>
+                  <small class="text-muted">
+                    <i class="bi bi-clock me-1"></i>{{ notif.created_at|timesince }} ago
+                  </small>
+                  {% if notif.link %}
+                    <div class="mt-1">
+                      <a href="{{ notif.link }}" class="btn btn-link btn-sm p-0 text-primary text-decoration-none small">
+                        View details <i class="bi bi-arrow-right ms-1"></i>
+                      </a>
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      {% if page_obj.has_other_pages %}
+        <nav class="mt-4">
+          <ul class="pagination pagination-sm justify-content-center">
+            {% if page_obj.has_previous %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+                  <i class="bi bi-chevron-left"></i>
+                </a>
+              </li>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+              {% if page_obj.number == num %}
+                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+              {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+              {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                  <i class="bi bi-chevron-right"></i>
+                </a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+      {% endif %}
+
+    {% else %}
+      <div class="card shadow-sm border-0">
+        <div class="card-body text-center py-5">
+          <i class="bi bi-bell-slash display-4 text-muted mb-3 d-block"></i>
+          <h6 class="text-muted">No notifications yet</h6>
+          <p class="text-muted small mb-0">You'll see injury updates, appointments, and team events here.</p>
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+</div>
+{% endblock %}
