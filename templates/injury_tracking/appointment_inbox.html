@@ -33,8 +33,9 @@
             <thead>
               <tr>
                 <th>Player</th>
-                <th>Date</th>
+                <th>Requested Date</th>
                 <th>Time Slot</th>
+                <th>Follow-up Date</th>
                 <th>Note</th>
                 <th>Status</th>
                 <th></th>
@@ -49,6 +50,14 @@
                   </td>
                   <td>{{ a.preferred_date|date:"l, M d, Y" }}</td>
                   <td><small>{{ a.get_preferred_time_slot_display }}</small></td>
+                  <td>
+                    {% if a.confirmed_datetime %}
+                      <span class="text-success fw-semibold">{{ a.confirmed_datetime|date:"M d, Y" }}</span>
+                      <br><small class="text-muted">{{ a.confirmed_datetime|date:"g:i A" }}</small>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
                   <td><small>{{ a.note|default:"—"|truncatechars:80 }}</small></td>
                   <td>
                     <span class="badge
