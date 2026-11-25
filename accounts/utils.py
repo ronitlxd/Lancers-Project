@@ -10,7 +10,10 @@ def notify(user, message, notification_type='INJURY', link='', send_email=False,
         message:           Notification body text.
         notification_type: One of INJURY, APPOINTMENT, CLEARANCE, EVENT.
         link:              Optional URL the notification links to.
-        send_email:        If True, also send a Django email to user.email.
+        send_email:        Request an email as well. Honoured only when
+                           settings.NOTIFICATION_EMAIL_ENABLED is true;
+                           outbound mail is disabled by default because the
+                           deployment has no network egress.
         subject:           Email subject (defaults to first 80 chars of message).
 
     Returns:
@@ -26,7 +29,15 @@ def notify(user, message, notification_type='INJURY', link='', send_email=False,
         link=link or '',
     )
 
-    if send_email and getattr(user, 'email', None):
+    # Outbound email is off unless explicitly enabled.  The deployment has no
+    # network egress (IT Services, 25 Nov 2026), where send_mail would hang on
+    # a blocked socket rather than fail, so the call is skipped entirely
+    # instead of relying on fail_silently.  The in-app Notification above is
+    # created either way, so nobody loses the message.
+    from django.conf import settings
+    if (send_email
+            and getattr(settings, 'NOTIFICATION_EMAIL_ENABLED', False)
+            and getattr(user, 'email', None)):
         _send_notification_email(user, message, subject, link)
 
     return notif

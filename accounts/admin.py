@@ -92,7 +92,7 @@ class TeamAdmin(admin.ModelAdmin):
 @admin.register(PlayerProfile)
 class PlayerProfileAdmin(admin.ModelAdmin):
     fieldsets = (
-        ('Personal Information', {'fields': ('user', 'preferred_name', 'alternate_email', 'student_id', 'citizenship', 'photo_id')}),
+        ('Personal Information', {'fields': ('user', 'preferred_name', 'alternate_email', 'student_id', 'citizenship')}),
         ('Local Address', {'fields': ('local_street_address', 'local_city', 'local_province', 'local_postal_code')}),
         ('Permanent Address', {'fields': ('permanent_street_address', 'permanent_city', 'permanent_province_state', 'permanent_postal_zip_code', 'permanent_country')}),
         ('Sports & Team Information', {'fields': ('sport_gender_category', 'height_feet', 'height_inches', 'weight_lbs', 'hometown', 'high_school', 'high_school_coach_name', 'position_event', 'previous_club_team', 'club_team_coach_name', 'family_member_oua_usports', 'family_member_details')}),

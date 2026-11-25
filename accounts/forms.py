@@ -6,7 +6,7 @@ class PlayerProfileForm(forms.ModelForm):
         model = PlayerProfile
         fields = [
             # Personal Information
-            'preferred_name', 'alternate_email', 'student_id', 'citizenship', 'photo_id',
+            'preferred_name', 'alternate_email', 'student_id', 'citizenship',
             # Local Address
             'local_street_address', 'local_city', 'local_province', 'local_postal_code',
             # Permanent Address
@@ -24,7 +24,6 @@ class PlayerProfileForm(forms.ModelForm):
             'alternate_email': forms.EmailInput(attrs={'class': 'form-control'}),
             'student_id': forms.TextInput(attrs={'class': 'form-control'}),
             'citizenship': forms.TextInput(attrs={'class': 'form-control'}),
-            'photo_id': forms.FileInput(attrs={'class': 'form-control'}),
             
             # Local Address
             'local_street_address': forms.TextInput(attrs={'class': 'form-control'}),

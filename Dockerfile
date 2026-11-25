@@ -35,4 +35,6 @@ EXPOSE 8080
 
 # Single replica, so migrations run on start. Revisit if this is ever scaled:
 # concurrent migrate on a shared SQLite file would race.
-CMD ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn --bind 0.0.0.0:8080 --workers 2 --access-logfile - --error-logfile - lancer_project.wsgi:application"]
+# The PVC is mounted empty at /data, and SQLite will not create a missing
+# directory, so make the database folder before migrate runs.
+CMD ["sh", "-c", "mkdir -p \"$(dirname \"${DB_PATH:-/data/db/db.sqlite3}\")\" && python manage.py migrate --noinput && exec gunicorn --bind 0.0.0.0:8080 --workers 2 --access-logfile - --error-logfile - lancer_project.wsgi:application"]

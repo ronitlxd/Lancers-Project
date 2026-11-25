@@ -156,19 +156,40 @@ AUTHENTICATION_BACKENDS = [
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-# Email -- reads from .env; defaults to console backend for local dev
+# ---------------------------------------------------------------------------
+# Email -- OFF by default (UWindsor IT review, finding 4 / IT response 1.6)
+#
+# IT Services' deployment posture for this application is "no egress, and only
+# ingress through the web interface, unless there is a documented and approved
+# need" (25 Nov 2026).  They have paused on SMTP relay details until there is a
+# clear functional case, so the application must not attempt an outbound
+# connection: against a blocked network send_mail does not fail fast, it hangs
+# until the socket times out, tying up a worker.
+#
+# Two independent guards:
+#   1. NOTIFICATION_EMAIL_ENABLED (below) stops notify() from calling send_mail
+#      at all.  Notifications stay in-app, which is where they already appear.
+#   2. EMAIL_BACKEND defaults to the dummy backend, which discards messages
+#      without opening a socket, so any future sender is also safe by default.
+#
+# To turn email on once a relay is approved, set NOTIFICATION_EMAIL_ENABLED and
+# EMAIL_BACKEND (plus host, port and credentials) in the environment.
+# ---------------------------------------------------------------------------
+NOTIFICATION_EMAIL_ENABLED = config(
+    'NOTIFICATION_EMAIL_ENABLED', default=False, cast=bool)
+
 EMAIL_BACKEND = config(
     'EMAIL_BACKEND',
-    default='django.core.mail.backends.console.EmailBackend'
+    default='django.core.mail.backends.dummy.EmailBackend'
 )
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 DEFAULT_FROM_EMAIL = config(
     'DEFAULT_FROM_EMAIL',
-    default='LancersPulse <noreply@lancerspulse.com>'
+    default='LancersPulse <noreply@uwindsor.ca>'
 )
 
 # django-axes rate limiting: lock after 5 failures, cooloff 5 minutes

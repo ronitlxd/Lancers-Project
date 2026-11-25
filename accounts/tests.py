@@ -146,7 +146,7 @@ class ErrorPageTests(TestCase):
 
 # ── Entra SSO (UWindsor IT review, finding 4) ─────────────────────────────────
 
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 
@@ -315,3 +315,71 @@ class DeploymentEndpointTests(TestCase):
         # SOCIALACCOUNT_LOGIN_ON_GET is False, but it must not be a 404).
         self.assertNotEqual(
             self.client.get('/accounts/microsoft/login/').status_code, 404)
+
+
+# ── No outbound email (IT Services deployment posture, 25 Nov 2026) ──────────
+
+from django.core import mail
+
+
+class OutboundEmailDisabledTests(TestCase):
+    """IT Services will grant no network egress without an approved case.
+
+    Against a blocked network send_mail does not fail fast, it hangs until the
+    socket times out and ties up a worker, so the call must be skipped rather
+    than left to fail_silently.
+    """
+
+    def setUp(self):
+        self.user = make_user(username='mailee')
+        self.user.email = 'mailee@uwindsor.ca'
+        self.user.save()
+        mail.outbox = []
+
+    def test_no_email_sent_by_default(self):
+        notify(self.user, 'Injury logged', send_email=True, subject='Test')
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_in_app_notification_still_created(self):
+        """Turning email off must not cost the user the message."""
+        notify(self.user, 'Injury logged', send_email=True, subject='Test')
+        self.assertEqual(
+            Notification.objects.filter(user=self.user).count(), 1)
+
+    @override_settings(NOTIFICATION_EMAIL_ENABLED=True)
+    def test_email_sent_once_explicitly_enabled(self):
+        notify(self.user, 'Injury logged', send_email=True, subject='Test')
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_settings_default_to_a_backend_that_opens_no_socket(self):
+        from django.conf import settings
+        self.assertFalse(getattr(settings, 'NOTIFICATION_EMAIL_ENABLED', False))
+
+
+class UpnIsAuthoritativeTests(TestCase):
+    """IT Services confirmed the UPN is the authoritative key (25 Nov 2026)."""
+
+    def test_upn_wins_over_object_id(self):
+        by_upn = make_user(username='by_upn_user')
+        by_upn.entra_upn = 'real.person@uwindsor.ca'
+        by_upn.save()
+
+        by_oid = make_user(username='by_oid_user')
+        by_oid.entra_oid = 'OID-OTHER'
+        by_oid.save()
+
+        found = EntraSocialAccountAdapter._find_local_user(
+            'OID-OTHER', 'real.person@uwindsor.ca', '')
+        self.assertEqual(found, by_upn)
+
+    def test_object_id_still_rescues_a_renamed_user(self):
+        """A UWinID change rewrites the UPN but never the object ID. Without
+        the fallback a renamed person arrives looking like a stranger."""
+        user = make_user(username='renamed_user')
+        user.entra_oid = 'OID-STABLE-2'
+        user.entra_upn = 'old.name@uwindsor.ca'
+        user.save()
+
+        found = EntraSocialAccountAdapter._find_local_user(
+            'OID-STABLE-2', 'brand.new.name@uwindsor.ca', '')
+        self.assertEqual(found, user)

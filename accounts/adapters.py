@@ -11,9 +11,11 @@ this (their response, sections 1.2, 1.3, 3.3, 3.6 and 3.7):
 * Anyone with a UWin account can authenticate against Entra, so authenticating
   must not by itself grant any access here.  The application grants nothing by
   default and admits only users an administrator has already provisioned.
-* IT expects the UPN at sign-in but has not confirmed whether the Entra object
-  ID should be the persistent key.  We store both and prefer the object ID,
-  which never changes, so either answer works without re-linking accounts.
+* IT Services confirmed on 25 Nov 2026 that the UPN is the authoritative key,
+  so matching tries the UPN first.  The Entra object ID is still stored and
+  used as a fallback: a UWinID change rewrites the UPN but never the object
+  ID, so without that fallback a renamed person would arrive looking like a
+  stranger and be refused.
 
 This replaces the old self-registration flow, which derived a user's role from
 the email address they typed into a public form with no verification step.
@@ -91,15 +93,21 @@ class EntraSocialAccountAdapter(DefaultSocialAccountAdapter):
 
     @staticmethod
     def _find_local_user(oid, upn, email):
-        """Locate the provisioned account, most reliable identifier first."""
+        """Locate the provisioned account.
+
+        UPN first: IT Services confirmed it is the authoritative key.  The
+        object ID is tried next so that a person whose UWinID changed - which
+        rewrites their UPN - is still recognised rather than refused as an
+        unknown identity.
+        """
         from .models import CustomUser
 
-        if oid:
-            user = CustomUser.objects.filter(entra_oid=oid).first()
-            if user:
-                return user
         if upn:
             user = CustomUser.objects.filter(entra_upn__iexact=upn).first()
+            if user:
+                return user
+        if oid:
+            user = CustomUser.objects.filter(entra_oid=oid).first()
             if user:
                 return user
         for candidate in (upn, email):
@@ -164,11 +172,12 @@ class EntraSocialAccountAdapter(DefaultSocialAccountAdapter):
             raise ImmediateHttpResponse(redirect('login'))
 
         # Work out how we matched BEFORE backfilling, or the answer is always
-        # 'oid' once _store_identifiers has run.
-        if oid and user.entra_oid == oid:
-            matched_on = 'oid'
-        elif upn and user.entra_upn and user.entra_upn.lower() == upn.lower():
+        # the authoritative key once _store_identifiers has run.
+        if upn and user.entra_upn and user.entra_upn.lower() == upn.lower():
             matched_on = 'upn'
+        elif oid and user.entra_oid == oid:
+            # The UPN on record differs: most likely a UWinID change.
+            matched_on = 'oid_fallback'
         else:
             matched_on = 'email_or_username'
 

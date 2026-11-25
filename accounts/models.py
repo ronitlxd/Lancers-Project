@@ -32,12 +32,10 @@ class CustomUser(AbstractUser):
     is_registration_complete = models.BooleanField(default=False)
 
     # --- Microsoft Entra identity (UWindsor IT review, finding 4) -----------
-    # Both identifiers are stored because IT Services has not yet confirmed
-    # which is authoritative (their response, section 3.3): they expect the
-    # UPN at sign-in but left the object ID open.  Linking prefers entra_oid,
-    # which never changes, and falls back to the UPN, which is rewritten if a
-    # person's UWinID changes.  Holding both means either answer works without
-    # a migration.
+    # IT Services confirmed on 25 Nov 2026 that the UPN is the authoritative
+    # key, so linking matches on entra_upn first.  entra_oid is kept as a
+    # fallback: a UWinID change rewrites the UPN but never the object ID, so
+    # without it a renamed person would arrive looking like a stranger.
     entra_oid = models.CharField(
         max_length=64, null=True, blank=True, unique=True, db_index=True,
         verbose_name='Entra object ID',
@@ -119,7 +117,6 @@ class PlayerProfile(models.Model):
     alternate_email = models.EmailField(blank=True)
     student_id = models.CharField(max_length=20, blank=True)
     citizenship = models.CharField(max_length=100, blank=True)
-    photo_id = models.ImageField(upload_to='player_ids/', blank=True, null=True)
     
     # Local Address (Current Residence)
     local_street_address = models.CharField(max_length=200, blank=True)

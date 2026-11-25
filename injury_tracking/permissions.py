@@ -24,9 +24,10 @@ Two deliberate differences from the previous inline checks:
 2.  Coaches are not granted access to clinical images.  Coaches need
     availability and training restrictions, not wound photographs.
 
-    PENDING: CHPH decision B1 has not been returned.  If Dr. Sutherland decides
-    coaches should see injury photos, add a COACH branch to
-    ``can_view_injury_photo`` mirroring the DOCTOR branch with scope 'COACH'.
+    CONFIRMED by CHPH on 25 Nov 2026.  Asked whether coaches need the image or
+    whether the athlete's injury status and availability are enough,
+    Dr. Sutherland answered that no pictures are needed.  Coaches keep full
+    access to injury status and restrictions through ``can_view_injury``.
 """
 
 from accounts.models import TeamPermission
@@ -61,6 +62,7 @@ def can_view_injury_photo(user, injury) -> bool:
         return injury.player_id == user.id
     if user.role == 'DOCTOR':
         return _has_team_access(user, injury.player.team_id, 'DOCTOR')
+    # COACH and anything else: no clinical images (CHPH, 25 Nov 2026).
     return False
 
 

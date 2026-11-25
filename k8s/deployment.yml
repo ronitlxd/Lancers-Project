@@ -63,11 +63,14 @@ spec:
               value: "True"
             - name: ALLOWED_HOSTS
               value: "hk-mac-injury.appsdev.uwindsor.ca"
-            # Both of these must live on the persistent volume. The SQLite file
-            # and its write-ahead log are what IT Services backs up; uploaded
-            # injury photos would otherwise vanish on every pod restart.
+            # IT Services confirmed a PersistentVolumeClaim mounted at /data,
+            # shared with the SQLite database, and recommended separate
+            # subdirectories (25 Nov 2026). Keeping the database and its
+            # write-ahead log in their own directory means a backup of the
+            # database directory does not sweep up athlete photographs, and
+            # the photo retention job cannot touch the database.
             - name: DB_PATH
-              value: /data/db.sqlite3
+              value: /data/db/db.sqlite3
             - name: MEDIA_ROOT
               value: /data/media
           volumeMounts:
