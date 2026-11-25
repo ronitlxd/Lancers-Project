@@ -1,0 +1,72 @@
+# CI for LancersPulse.
+#
+# IT Services run Trivy in their own CI/CD pipeline and recommended the
+# application team run it during development and address serious findings
+# (deployment review response, section 1.10). This workflow does that, and
+# runs the test suite, so problems surface before a deployment rather than
+# during one.
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  tests:
+    name: Django tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: System checks
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret-value-padding-to-50-chars
+          MEDIA_ROOT: /tmp/ci-media
+        run: python manage.py check
+
+      - name: Deployment checks
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret-value-padding-to-50-chars
+          DEBUG: "False"
+          BEHIND_PROXY: "True"
+          MEDIA_ROOT: /tmp/ci-media
+        run: python manage.py check --deploy
+
+      - name: Confirm no uncommitted model changes
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret-value-padding-to-50-chars
+          MEDIA_ROOT: /tmp/ci-media
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Run tests
+        env:
+          SECRET_KEY: ci-only-not-a-real-secret-value-padding-to-50-chars
+          MEDIA_ROOT: /tmp/ci-media
+        run: python manage.py test --verbosity 2
+
+  trivy:
+    name: Trivy vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan dependencies and configuration
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          # Fail the build on serious findings only, so the signal stays
+          # meaningful. Lower severities still appear in the log.
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true

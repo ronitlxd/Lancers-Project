@@ -1,0 +1,95 @@
+# Scheduled data retention for LancersPulse.
+#
+# UWindsor IT review, finding 5. The purge command exists, but retention is
+# only enforced if something runs it: without this CronJob the policy agreed
+# with CHPH is documentation, not behaviour.
+#
+# IMPORTANT, the ReadWriteOnce constraint.
+# The PVC at /data is RWO, so it can only be mounted by pods on the same node
+# as the web pod. The podAffinity below co-locates this job with the running
+# application for that reason. If the cluster cannot satisfy it the job will
+# stay Pending rather than fail quietly, which is the safer outcome - but it
+# does mean a Pending job is a signal to investigate, not to ignore.
+#
+# SQLite is configured with WAL and a 20s busy timeout, so a short-lived job
+# writing alongside the web workers is safe. concurrencyPolicy: Forbid stops
+# two purges overlapping.
+#
+# To see what a run would do without changing anything:
+#   kubectl create job --from=cronjob/hk-mac-injury-purge purge-dryrun
+#   (then edit the job to add --dry-run, or run the command via kubectl exec
+#    against the web pod)
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: hk-mac-injury-purge
+  labels:
+    app: hk-mac-injury
+spec:
+  # Weekly, Sunday 03:00. The shortest retention clock is a year, so weekly is
+  # ample; running more often only adds contention for the SQLite file.
+  schedule: "0 3 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: hk-mac-injury
+            component: purge
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            fsGroup: 10001
+          affinity:
+            podAffinity:
+              # Must land on the node holding the RWO volume.
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchExpressions:
+                      - key: app
+                        operator: In
+                        values: ["hk-mac-injury"]
+                      - key: component
+                        operator: NotIn
+                        values: ["purge"]
+                  topologyKey: kubernetes.io/hostname
+          containers:
+            - name: purge
+              image: hk-mac-injury:latest
+              imagePullPolicy: IfNotPresent
+              command:
+                - python
+                - manage.py
+                - purge_expired_data
+                - --actor=scheduled
+              envFrom:
+                - secretRef:
+                    name: hk-mac-injury-entra-creds
+              env:
+                - name: DEBUG
+                  value: "False"
+                - name: DB_PATH
+                  value: /data/db/db.sqlite3
+                - name: MEDIA_ROOT
+                  value: /data/media
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 256Mi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: hk-mac-injury-data
