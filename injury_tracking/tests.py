@@ -385,7 +385,7 @@ from django.core.management import call_command
 from django.test import override_settings
 from django.utils import timezone
 
-from injury_tracking.models import PurgeLedgerEntry
+from injury_tracking.models import PurgeLedgerEntry, WellnessCheckIn
 
 
 class RetentionPurgeTests(TestCase):
@@ -487,8 +487,16 @@ class RetentionPurgeTests(TestCase):
         self.assertEqual(first.player_id, second.player_id)
 
     def test_expired_photo_deleted_without_anonymising_record(self):
+        """Photos go on their own shorter clock, leaving the record intact.
+
+        Per the table agreed with CHPH on 25 Nov 2026 the injury must also be
+        resolved, so this one is marked RECOVERED; see
+        AgreedRetentionTableTests for the unresolved case.
+        """
         injury = self._injury(
             injury_date=timezone.localdate() - timedelta(days=400))
+        injury.status = 'RECOVERED'
+        injury.save()
         self._run()
 
         injury.refresh_from_db()
@@ -500,6 +508,8 @@ class RetentionPurgeTests(TestCase):
     def test_photo_retention_period_is_configurable(self):
         injury = self._injury(
             injury_date=timezone.localdate() - timedelta(days=400))
+        injury.status = 'RECOVERED'
+        injury.save()
         self._run()
         injury.refresh_from_db()
         self.assertTrue(injury.photo)
@@ -592,3 +602,114 @@ class PurgeLedgerReplayTests(TestCase):
         out = StringIO()
         call_command('replay_purge_ledger', '--from-file', path, stdout=out)
         self.assertIn('target no longer present: 1', out.getvalue())
+
+
+class AgreedRetentionTableTests(TestCase):
+    """The four rows CHPH agreed on 25 Nov 2026."""
+
+    def setUp(self):
+        self.team = make_team("Table FC")
+        self.player = make_user("PLAYER", "table_player", team=self.team)
+        self.body_part = BodyPart.objects.create(name="Hip")
+        self.injury_type = InjuryType.objects.create(name="Bruise")
+        self.severity = make_severity("Minor")
+
+    def _run(self, *args):
+        out = StringIO()
+        call_command('purge_expired_data', *args, stdout=out, stderr=StringIO())
+        return out.getvalue()
+
+    def _injury_with_photo(self, days_ago, resolved):
+        injury = make_injury(
+            self.player, self.body_part, self.injury_type, self.severity,
+            status="RECOVERED" if resolved else "ACTIVE")
+        injury.injury_date = timezone.localdate() - timedelta(days=days_ago)
+        injury.save()
+        injury.photo.save("p.png", SimpleUploadedFile(
+            "p.png", minimal_png(), content_type="image/png"), save=True)
+        return injury
+
+    # -- photos: one year AND resolved ---------------------------------------
+
+    def test_old_photo_kept_while_injury_unresolved(self):
+        """"One year, or on recovery if later" means both must hold. A photo
+        of an injury still being treated is still clinically useful."""
+        injury = self._injury_with_photo(days_ago=500, resolved=False)
+        self._run()
+        injury.refresh_from_db()
+        self.assertTrue(injury.photo)
+
+    def test_old_photo_deleted_once_resolved(self):
+        injury = self._injury_with_photo(days_ago=500, resolved=True)
+        self._run()
+        injury.refresh_from_db()
+        self.assertFalse(injury.photo)
+
+    def test_recent_photo_kept_even_when_resolved(self):
+        injury = self._injury_with_photo(days_ago=10, resolved=True)
+        self._run()
+        injury.refresh_from_db()
+        self.assertTrue(injury.photo)
+
+    # -- wellness check-ins ---------------------------------------------------
+
+    def test_old_checkin_loses_notes_but_keeps_scores(self):
+        checkin = WellnessCheckIn.objects.create(
+            player=self.player,
+            week_start=timezone.localdate() - timedelta(days=365 * 9),
+            sleep_score=4, pain_score=7, mood_score=3,
+            notes="Feeling low and not sleeping.",
+        )
+        self._run()
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.notes, '')
+        self.assertEqual((checkin.sleep_score, checkin.pain_score, checkin.mood_score),
+                         (4, 7, 3))
+        self.assertNotEqual(checkin.player_id, self.player.pk)
+        self.assertEqual(checkin.player.team_id, self.team.pk)
+
+    def test_recent_checkin_untouched(self):
+        checkin = WellnessCheckIn.objects.create(
+            player=self.player, week_start=timezone.localdate(),
+            sleep_score=8, pain_score=1, mood_score=9, notes="Good week.")
+        self._run()
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.notes, "Good week.")
+
+    # -- emergency contacts ---------------------------------------------------
+
+    def test_emergency_contacts_cleared_when_account_deactivated(self):
+        leaver = make_user("PLAYER", "leaver", team=self.team)
+        leaver.emergency_contact_name = "A Parent"
+        leaver.emergency_contact_phone = "555-0100"
+        leaver.emergency_contact_email = "parent@example.com"
+        leaver.emergency_contact_relationship = "Parent"
+        leaver.is_active = False
+        leaver.save()
+
+        self._run()
+
+        leaver.refresh_from_db()
+        self.assertEqual(leaver.emergency_contact_name, '')
+        self.assertEqual(leaver.emergency_contact_phone, '')
+        self.assertEqual(leaver.emergency_contact_email, '')
+        self.assertEqual(leaver.emergency_contact_relationship, '')
+
+    def test_active_athlete_keeps_emergency_contacts(self):
+        self.player.emergency_contact_name = "A Parent"
+        self.player.save()
+        self._run()
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.emergency_contact_name, "A Parent")
+
+    def test_never_logged_in_leaver_is_still_cleared(self):
+        """last_login is NULL for an account that never signed in; it must not
+        be skipped."""
+        leaver = make_user("PLAYER", "never_in", team=self.team)
+        leaver.emergency_contact_name = "A Parent"
+        leaver.is_active = False
+        leaver.last_login = None
+        leaver.save()
+        self._run()
+        leaver.refresh_from_db()
+        self.assertEqual(leaver.emergency_contact_name, '')

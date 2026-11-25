@@ -321,10 +321,14 @@ SOCIALACCOUNT_STORE_TOKENS = False
 # ---------------------------------------------------------------------------
 # Data retention (UWindsor IT review, finding 5)
 #
-# THESE PERIODS ARE PROPOSALS, NOT POLICY.  They are placeholders so the purge
-# mechanism can be built and tested; CHPH and University Records Management
-# have not yet set the real values (open question B4/B7-B10).  Do not treat a
-# number here as agreed retention.
+# Agreed with CHPH (Dr. Sutherland) on 25 Nov 2026.
+#
+# CAVEAT WORTH KEEPING VISIBLE: these periods were proposed by the project team
+# as sensible defaults and accepted as proposed.  They have NOT been checked
+# against a University of Windsor records retention schedule, and retention of
+# health-related records is often prescribed rather than chosen.  University
+# Records Management should confirm them before this is treated as policy; the
+# seven-year figure in particular is a common default, not a verified one.
 #
 # IT Services supports anonymising rather than deleting, so year-over-year
 # injury trends survive, and deleting identifying photos when the related
@@ -334,9 +338,30 @@ SOCIALACCOUNT_STORE_TOKENS = False
 # to backups.  After any restore, re-run `purge_expired_data`, then
 # `replay_purge_ledger` for anything deleted outside the retention rules.
 # ---------------------------------------------------------------------------
+# Injury records: anonymise seven years after the last activity on the record.
 RETENTION_INJURY_RECORD_YEARS = config(
     'RETENTION_INJURY_RECORD_YEARS', default=7, cast=int)
+
+# Injury photographs: one year, "or on recovery if later" - so both conditions
+# must hold.  A photograph of an injury still being treated after a year is
+# still clinically useful, and deleting it on the calendar alone would take a
+# working record away from the therapist.
 RETENTION_INJURY_PHOTO_DAYS = config(
     'RETENTION_INJURY_PHOTO_DAYS', default=365, cast=int)
+
+# Appointment notes and wellness check-ins: same clock as injury records.
+RETENTION_SUPPORTING_RECORD_YEARS = config(
+    'RETENTION_SUPPORTING_RECORD_YEARS',
+    default=config('RETENTION_INJURY_RECORD_YEARS', default=7, cast=int),
+    cast=int)
+
+# Emergency contact details: removed when the athlete leaves the programme.
+# "Leaves" is approximated by the account being deactivated, since nothing
+# else in the system records a departure.  PROCESS DEPENDENCY: this rule only
+# fires if someone actually deactivates leavers' accounts.  Default 0 days
+# means "as soon as the account is deactivated"; raise it for a grace period.
+RETENTION_EMERGENCY_CONTACT_DAYS = config(
+    'RETENTION_EMERGENCY_CONTACT_DAYS', default=0, cast=int)
+
 RETENTION_PENDING_UPLOAD_DAYS = config(
     'RETENTION_PENDING_UPLOAD_DAYS', default=1, cast=int)

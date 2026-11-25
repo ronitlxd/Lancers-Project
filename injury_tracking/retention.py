@@ -26,6 +26,11 @@ User = get_user_model()
 ANON_FIRST_NAME = 'Anonymised'
 ANON_LAST_NAME = 'Athlete'
 
+# Placeholder accounts are identified by this username prefix.  Used to keep
+# already-anonymised rows out of the purge queries without adding an
+# `anonymised_at` column to every supporting model.
+PLACEHOLDER_PREFIX = 'anonymised_'
+
 
 def placeholder_athlete_for(team):
     """Return (creating if needed) the placeholder athlete for a team."""
@@ -117,6 +122,75 @@ def anonymise_injury_record(record, reason, actor='system', dry_run=False):
     record.save()
 
     record_ledger('InjuryRecord', record.pk,
+                  PurgeLedgerEntry.ACTION_ANONYMISE,
+                  reason=reason, actor=actor)
+    return True
+
+
+def anonymise_wellness_checkin(checkin, reason, actor='system', dry_run=False):
+    """Strip the free text from a wellness check-in, keep the scores.
+
+    Agreed with CHPH on 25 Nov 2026: same clock as injury records.  The sleep,
+    pain and mood scores are the analytic value and survive; the notes are
+    where a person describes themselves and do not.
+    """
+    if checkin.player.username.startswith(PLACEHOLDER_PREFIX):
+        return False
+    if dry_run:
+        return True
+
+    placeholder = placeholder_athlete_for(checkin.player.team)
+    checkin.player = placeholder
+    checkin.notes = ''
+    checkin.save(update_fields=['player', 'notes'])
+
+    record_ledger('WellnessCheckIn', checkin.pk,
+                  PurgeLedgerEntry.ACTION_ANONYMISE,
+                  reason=reason, actor=actor)
+    return True
+
+
+def anonymise_appointment(appointment, reason, actor='system', dry_run=False):
+    """Strip the free text from an appointment and detach the athlete."""
+    if appointment.player.username.startswith(PLACEHOLDER_PREFIX):
+        return False
+    if dry_run:
+        return True
+
+    placeholder = placeholder_athlete_for(appointment.team or appointment.player.team)
+    appointment.player = placeholder
+    appointment.note = ''
+    appointment.save(update_fields=['player', 'note'])
+
+    record_ledger('Appointment', appointment.pk,
+                  PurgeLedgerEntry.ACTION_ANONYMISE,
+                  reason=reason, actor=actor)
+    return True
+
+
+def clear_emergency_contacts(user, reason, actor='system', dry_run=False):
+    """Remove emergency contact details from a departed athlete's account.
+
+    These describe a THIRD PARTY who never used the system and was never asked,
+    which is why they go as soon as the athlete leaves rather than on the
+    longer clinical clock.
+    """
+    fields = (
+        'emergency_contact_name',
+        'emergency_contact_phone',
+        'emergency_contact_relationship',
+        'emergency_contact_email',
+    )
+    if not any(getattr(user, f, '') for f in fields):
+        return False
+    if dry_run:
+        return True
+
+    for field in fields:
+        setattr(user, field, '')
+    user.save(update_fields=list(fields))
+
+    record_ledger('CustomUser', user.pk,
                   PurgeLedgerEntry.ACTION_ANONYMISE,
                   reason=reason, actor=actor)
     return True

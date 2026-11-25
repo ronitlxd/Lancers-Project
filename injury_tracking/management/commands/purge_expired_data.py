@@ -22,12 +22,23 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from injury_tracking.models import InjuryRecord, PurgeLedgerEntry
+from django.contrib.auth import get_user_model
+from django.db.models import Q
+
+from injury_tracking.models import (
+    Appointment, InjuryRecord, PurgeLedgerEntry, WellnessCheckIn,
+)
 from injury_tracking.retention import (
+    PLACEHOLDER_PREFIX,
+    anonymise_appointment,
     anonymise_injury_record,
+    anonymise_wellness_checkin,
+    clear_emergency_contacts,
     delete_injury_photo,
     record_ledger,
 )
+
+User = get_user_model()
 
 
 class Command(BaseCommand):
@@ -52,6 +63,9 @@ class Command(BaseCommand):
         counts = {
             'records_anonymised': self._anonymise_expired(now, actor, dry_run),
             'photos_deleted': self._delete_expired_photos(now, actor, dry_run),
+            'checkins_anonymised': self._anonymise_wellness(now, actor, dry_run),
+            'appointments_anonymised': self._anonymise_appointments(now, actor, dry_run),
+            'emergency_contacts_cleared': self._clear_emergency_contacts(now, actor, dry_run),
             'orphan_files_deleted': self._delete_orphan_uploads(now, actor, dry_run),
         }
 
@@ -94,19 +108,21 @@ class Command(BaseCommand):
         return count
 
     def _delete_expired_photos(self, now, actor, dry_run):
-        """Photographs outlive their usefulness long before the record does.
+        """Photographs: one year, "or on recovery if later".
 
-        Highest-risk data in the system and the easiest to justify removing
-        early, so they have their own shorter clock, measured from the injury
-        date.
+        Both conditions must hold, per the retention table agreed with CHPH on
+        25 Nov 2026. A photograph of an injury still being treated after a
+        year is still clinically useful, so the calendar alone does not remove
+        it; the injury must also be resolved.
         """
         days = settings.RETENTION_INJURY_PHOTO_DAYS
         cutoff = (now - timedelta(days=days)).date()
-        reason = f'Retention: photo older than {days} days'
+        reason = f'Retention: photo older than {days} days and injury resolved'
 
         queryset = (
             InjuryRecord.objects
             .filter(anonymised_at__isnull=True, injury_date__lt=cutoff)
+            .filter(Q(status='RECOVERED') | Q(medical_clearance=True))
             .exclude(photo='')
             .exclude(photo__isnull=True)
         )
@@ -116,6 +132,80 @@ class Command(BaseCommand):
             if delete_injury_photo(record, reason, actor=actor, dry_run=dry_run):
                 count += 1
                 self.stdout.write(f'  delete photo for InjuryRecord #{record.pk}')
+        return count
+
+    def _anonymise_wellness(self, now, actor, dry_run):
+        """Wellness check-ins, on the injury-record clock (CHPH, 25 Nov 2026).
+
+        Scores are kept, notes are cleared, the athlete is replaced by the
+        per-team placeholder. mood_score is arguably mental-health data, which
+        is why the free text around it does not linger.
+        """
+        years = settings.RETENTION_SUPPORTING_RECORD_YEARS
+        cutoff = (now - timedelta(days=365 * years)).date()
+        reason = f'Retention: check-in older than {years} years'
+
+        queryset = (
+            WellnessCheckIn.objects
+            .select_related('player__team')
+            .filter(week_start__lt=cutoff)
+            .exclude(player__username__startswith=PLACEHOLDER_PREFIX)
+        )
+
+        count = 0
+        for checkin in queryset.iterator():
+            if anonymise_wellness_checkin(checkin, reason, actor=actor, dry_run=dry_run):
+                count += 1
+                self.stdout.write(f'  anonymise WellnessCheckIn #{checkin.pk}')
+        return count
+
+    def _anonymise_appointments(self, now, actor, dry_run):
+        """Appointment notes, on the injury-record clock (CHPH, 25 Nov 2026)."""
+        years = settings.RETENTION_SUPPORTING_RECORD_YEARS
+        cutoff = now - timedelta(days=365 * years)
+        reason = f'Retention: appointment older than {years} years'
+
+        queryset = (
+            Appointment.objects
+            .select_related('player__team', 'team')
+            .filter(created_at__lt=cutoff)
+            .exclude(player__username__startswith=PLACEHOLDER_PREFIX)
+        )
+
+        count = 0
+        for appointment in queryset.iterator():
+            if anonymise_appointment(appointment, reason, actor=actor, dry_run=dry_run):
+                count += 1
+                self.stdout.write(f'  anonymise Appointment #{appointment.pk}')
+        return count
+
+    def _clear_emergency_contacts(self, now, actor, dry_run):
+        """Emergency contacts, removed when the athlete leaves.
+
+        Nothing in the system records a departure, so a deactivated account is
+        used as the proxy. PROCESS DEPENDENCY: this only fires if leavers'
+        accounts are actually deactivated. Placeholder accounts are skipped -
+        they are inactive by construction and hold no contact details anyway.
+        """
+        days = settings.RETENTION_EMERGENCY_CONTACT_DAYS
+        cutoff = now - timedelta(days=days)
+        reason = 'Retention: account deactivated'
+
+        # last_login is NULL for anyone who never signed in. Without the
+        # isnull branch those accounts would never match and their emergency
+        # contacts would sit here indefinitely.
+        queryset = (
+            User.objects
+            .filter(is_active=False)
+            .filter(Q(last_login__lt=cutoff) | Q(last_login__isnull=True))
+            .exclude(username__startswith=PLACEHOLDER_PREFIX)
+        )
+
+        count = 0
+        for user in queryset.iterator():
+            if clear_emergency_contacts(user, reason, actor=actor, dry_run=dry_run):
+                count += 1
+                self.stdout.write(f'  clear emergency contacts for user #{user.pk}')
         return count
 
     def _delete_orphan_uploads(self, now, actor, dry_run):
