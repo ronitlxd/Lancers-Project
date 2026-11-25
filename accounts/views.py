@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
@@ -6,11 +8,11 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from .forms import (
-    BasicRegistrationForm, PlayerProfileForm, CoachProfileForm, DoctorProfileForm,
+    PlayerProfileForm, CoachProfileForm, DoctorProfileForm,
     TeamSelectionForm, CoachTeamSelectionForm, UserProfileForm, TeamPermissionRequestForm,
-    PlayerRegisterStep1Form, PlayerRegisterStep2Form,
     PlayerSelfPersonalForm, PlayerSelfSportForm,
 )
+from lancer_project.audit import audit
 from .models import PlayerProfile, CoachProfile, DoctorProfile, TeamPermissionRequest, TeamPermission, CustomUser
 
 def csrf_failure(request, reason=""):
@@ -33,164 +35,22 @@ def csrf_failure(request, reason=""):
     return redirect(target)
 
 
-SESSION_KEY_REG_STEP1 = 'player_register_step1'
+# ---------------------------------------------------------------------------
+# Public self-registration was REMOVED (UWindsor IT review, findings 1 and 3).
+#
+# The old flow let anyone reach /register/ and took their role from the email
+# address they typed, with no verification step: registering as
+# <anything>@doctor.uwindsor.ca granted Athletic Therapist access to athlete
+# medical records.  It also wrote an unauthenticated visitor's uploaded file
+# into MEDIA_ROOT under their session key, with the extension taken from the
+# client.
+#
+# Accounts are now provisioned by an administrator, who assigns the role and
+# team.  Entra will authenticate; Django remains the authority on who may do
+# what (IT Services response, sections 1.2, 1.3 and 3.6).  New users still
+# finish their own profile through complete_registration_view below.
+# ---------------------------------------------------------------------------
 
-
-def _infer_role_from_email(email):
-    """Mirror BasicRegistrationForm.get_role_from_email() without a full form."""
-    email = (email or '').lower()
-    from .models import EmailRoleMapping
-    for mapping in EmailRoleMapping.objects.filter(is_active=True):
-        if mapping.email_pattern.startswith('@'):
-            if email.endswith(mapping.email_pattern):
-                return mapping.role, mapping.team
-        elif email == mapping.email_pattern.lower():
-            return mapping.role, mapping.team
-    if email.endswith('@athlete.uwindsor.ca'):
-        return 'PLAYER', None
-    if email.endswith('@coach.uwindsor.ca'):
-        return 'COACH', None
-    if email.endswith('@doctor.uwindsor.ca'):
-        return 'DOCTOR', None
-    return 'PLAYER', None
-
-
-def register_view(request):
-    """Step 1 of registration. For PLAYER role, redirects to step 2; for COACH/DOCTOR,
-    creates the account and sends them to login + the existing complete-registration flow.
-    """
-    if request.method == 'POST':
-        form = PlayerRegisterStep1Form(request.POST, request.FILES)
-        if form.is_valid():
-            cd = form.cleaned_data
-            role, team = _infer_role_from_email(cd['email'])
-
-            # Stash step-1 data in session; commit happens in step 2 (for players)
-            # or right here (for coach/doctor — no extra step in this slice).
-            request.session[SESSION_KEY_REG_STEP1] = {
-                'first_name': cd['first_name'],
-                'last_name': cd['last_name'],
-                'email': cd['email'],
-                'student_id': cd['student_id'],
-                'phone': cd.get('phone', ''),
-                'password': cd['password1'],
-                'role': role,
-                'team_id': team.id if team else None,
-            }
-            # Hold the uploaded photo in session as base64-ish? Simpler: write it to
-            # the user on commit. We re-prompt on step 2 if it's a player, since we
-            # can't easily round-trip a file through a session.
-            if role == 'PLAYER':
-                # Persist whether they attached a photo so step 2 can re-prompt only if needed.
-                request.session[SESSION_KEY_REG_STEP1]['has_photo'] = bool(cd.get('profile_picture'))
-                # Save photo immediately to /tmp via the user-doesn't-exist-yet workaround:
-                # We instead defer the photo to step 2's POST (player re-uploads only if they
-                # cleared the file). To keep UX minimal, we store the file in the session-keyed
-                # cache by saving it to a pending PlayerProfile-less location:
-                photo = cd.get('profile_picture')
-                if photo:
-                    # Save under MEDIA_ROOT/_pending_profile/<sessionkey>.<ext>
-                    from django.core.files.storage import default_storage
-                    from django.core.files.base import ContentFile
-                    ext = (photo.name.rsplit('.', 1)[-1] or 'jpg').lower()
-                    if not request.session.session_key:
-                        request.session.save()
-                    pending_path = f"_pending_profile/{request.session.session_key}.{ext}"
-                    if default_storage.exists(pending_path):
-                        default_storage.delete(pending_path)
-                    default_storage.save(pending_path, ContentFile(photo.read()))
-                    request.session[SESSION_KEY_REG_STEP1]['pending_photo_path'] = pending_path
-                return redirect('player_register_step2')
-
-            # COACH / DOCTOR path: create the user now, send them to login.
-            user = _create_user_from_step1(request.session[SESSION_KEY_REG_STEP1])
-            request.session.pop(SESSION_KEY_REG_STEP1, None)
-            messages.success(request, 'Account created. Please log in to complete your registration.')
-            return redirect('login')
-    else:
-        form = PlayerRegisterStep1Form()
-    return render(request, 'accounts/register.html', {
-        'form': form,
-        'step': 1,
-        'total_steps': 2,
-    })
-
-
-def _create_user_from_step1(data, profile_picture_file=None, pending_photo_path=None):
-    """Create CustomUser from session-stored step 1 data."""
-    from django.core.files.storage import default_storage
-    from django.contrib.auth.hashers import make_password
-    email = data['email']
-    username = email.split('@')[0]
-    # Ensure uniqueness of username
-    base, n = username, 1
-    while CustomUser.objects.filter(username=username).exists():
-        n += 1
-        username = f"{base}{n}"
-    team = None
-    if data.get('team_id'):
-        from .models import Team
-        team = Team.objects.filter(id=data['team_id']).first()
-    user = CustomUser(
-        username=username,
-        email=email,
-        first_name=data['first_name'],
-        last_name=data['last_name'],
-        role=data['role'],
-        team=team,
-        phone=data.get('phone', ''),
-        is_registration_complete=False,
-    )
-    user.password = make_password(data['password'])
-    # Attach photo: either fresh from form (preferred), or pending file from step 1.
-    if profile_picture_file:
-        user.profile_picture = profile_picture_file
-    elif pending_photo_path and default_storage.exists(pending_photo_path):
-        from django.core.files.base import ContentFile
-        with default_storage.open(pending_photo_path, 'rb') as f:
-            user.profile_picture.save(pending_photo_path.split('/')[-1], ContentFile(f.read()), save=False)
-        default_storage.delete(pending_photo_path)
-    user.save()
-    return user
-
-
-def player_register_step2_view(request):
-    """Step 2 of player registration: Sports & Team info, then auto-login + dashboard."""
-    step1 = request.session.get(SESSION_KEY_REG_STEP1)
-    if not step1 or step1.get('role') != 'PLAYER':
-        messages.error(request, 'Please start registration from the beginning.')
-        return redirect('register')
-
-    if request.method == 'POST':
-        form = PlayerRegisterStep2Form(request.POST)
-        if form.is_valid():
-            # Create the user now
-            user = _create_user_from_step1(
-                step1,
-                profile_picture_file=None,
-                pending_photo_path=step1.get('pending_photo_path'),
-            )
-            user.team = form.cleaned_data['team']
-            user.is_registration_complete = True
-            # store student_id on the PlayerProfile
-            profile = form.save(commit=False)
-            profile.user = user
-            profile.student_id = step1.get('student_id', '')
-            profile.save()
-            user.save()
-            request.session.pop(SESSION_KEY_REG_STEP1, None)
-            # Auto-login and redirect straight to the player dashboard
-            login(request, user)
-            messages.success(request, 'Welcome! Your account is ready.')
-            return redirect('tracking:player_dashboard')
-    else:
-        form = PlayerRegisterStep2Form()
-    return render(request, 'accounts/register_step2.html', {
-        'form': form,
-        'step': 2,
-        'total_steps': 2,
-        'first_name': step1.get('first_name', ''),
-    })
 
 @login_required
 def complete_registration_view(request):
@@ -228,9 +88,9 @@ def complete_registration_view(request):
                 profile.user = user
                 profile.save()
                 
-                # Coaches cannot select their own team - only admins can assign teams
-                # If user already has a team from EmailRoleMapping, keep it
-                # Otherwise, leave it blank for admin assignment (security measure)
+                # Coaches cannot select their own team - only admins assign teams.
+                # Any team already set by an administrator is kept; otherwise it
+                # stays blank until one is assigned (no access by default).
                 
                 user.is_registration_complete = True
                 user.save()
@@ -652,50 +512,89 @@ def admin_decide_request(request, req_id, decision):
     req.reviewed_by = request.user
     req.reviewed_at = timezone.now()
     req.save()
+    # Granting a team permission widens who can read clinical data, so it is
+    # an auditable event in its own right (UWindsor IT review, finding 7).
+    audit(
+        'TEAM_PERMISSION_DECISION',
+        actor=request.user,
+        request=request,
+        target_type='TeamPermissionRequest',
+        target_id=req.id,
+        subject_id=req.user_id,
+        team_id=req.team_id,
+        role_scope=req.role_scope,
+        decision=req.status,
+    )
     return redirect('admin_review_requests')
 
+
 # ---------------------------------------------------------------------------
-# Protected media serving (dev only)
-# Injury photos are sensitive; require login + ownership/team check before
-# serving them. Profile pictures are less sensitive and served normally.
+# Protected media serving
+#
+# UWindsor IT review, finding 1: injury photographs were reachable without an
+# authorization check in production.  The cause was routing: this view existed
+# but lancer_project/urls.py only registered it inside `if settings.DEBUG:`, so
+# in production /media/ was served by the web server and never reached Django.
+#
+# The route is now registered unconditionally and keyed on the injury's primary
+# key rather than a filename, which removes both the fragile
+# `photo='injury_photos/' + filename` lookup and the path-traversal surface.
+#
+# Profile pictures remain unprotected by design. Any other upload that needs
+# restricting should follow the same pattern as this view.
 # ---------------------------------------------------------------------------
-import os
 from django.http import FileResponse, Http404
-from django.conf import settings as django_settings
+
+from injury_tracking.permissions import can_view_injury_photo
+
+_PHOTO_CONTENT_TYPES = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+}
+
 
 @login_required
-def serve_injury_photo(request, filename):
-    """Serve injury_photos/<filename> only to authenticated users who have
-    permission to view that record (player who owns it, their team doctor,
-    their team coach, or an admin)."""
+def serve_injury_photo(request, injury_id):
+    """Serve an injury photograph to a user authorized to see it.
+
+    Denials raise Http404 rather than PermissionDenied: a 403 would confirm
+    that a photo exists for that injury, which is itself a disclosure.
+    """
     from injury_tracking.models import InjuryRecord
 
-    # Locate the file on disk
-    file_path = os.path.join(django_settings.MEDIA_ROOT, 'injury_photos', filename)
-    if not os.path.isfile(file_path):
-        raise Http404
+    injury = get_object_or_404(
+        InjuryRecord.objects.select_related('player'), pk=injury_id
+    )
 
-    # Fi    # Find the InjuryRecord that owns this file
-    try:
-        injury = InjuryRecord.objects.select_related('player').get(
-            photo='injury_photos/' + filename
+    if not injury.photo or not can_view_injury_photo(request.user, injury):
+        audit(
+            'INJURY_PHOTO_VIEW',
+            actor=request.user,
+            request=request,
+            outcome='FAILURE',
+            target_type='InjuryRecord',
+            target_id=injury_id,
         )
-    except InjuryRecord.DoesNotExist:
         raise Http404
 
-    # Permission check
-    user = request.user
-    allowed = False
-    if user.role == 'ADMIN':
-        allowed = True
-    elif user.role == 'PLAYER' and injury.player == user:
-        allowed = True
-    elif user.role in ('DOCTOR', 'COACH'):
-        # Allow if same team (or user has no team = multi-team access)
-        if user.team is None or user.team == injury.player.team:
-            allowed = True
+    audit(
+        'INJURY_PHOTO_VIEW',
+        actor=request.user,
+        request=request,
+        target_type='InjuryRecord',
+        target_id=injury.pk,
+    )
 
-    if not allowed:
-        raise Http404
-
-    return FileResponse(open(file_path, 'rb'))
+    suffix = Path(injury.photo.name).suffix.lower()
+    response = FileResponse(
+        injury.photo.open('rb'),
+        content_type=_PHOTO_CONTENT_TYPES.get(suffix, 'application/octet-stream'),
+    )
+    # Never let a browser sniff a stored file into something executable.
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Content-Disposition'] = 'inline'
+    # Cache-Control: no-store is already applied to authenticated responses by
+    # lancer_project.middleware.NoCacheAuthenticatedMiddleware.
+    return response

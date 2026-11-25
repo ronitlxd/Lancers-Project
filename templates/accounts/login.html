@@ -320,11 +320,6 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'register' %}">
-                                <i class="bi bi-person-plus me-1"></i>Register
-                            </a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link" href="{% url 'about' %}">
                                 <i class="bi bi-info-circle me-1"></i>About
                             </a>
@@ -359,9 +354,6 @@
                             <label for="password" class="form-label">Password</label>
                             <input type="password" class="form-control" id="password" name="password" required autocomplete="current-password">
                         </div>
-                        <div class="mb-3 d-flex justify-content-end">
-                            <a href="{% url 'password_reset' %}" class="small text-primary" style="text-decoration: none;">Forgot your password?</a>
-                        </div>
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary btn-lg">
                                 <i class="bi bi-box-arrow-in-right me-2"></i>Sign In
@@ -372,10 +364,10 @@
                     <hr class="my-4">
                     
                     <div class="text-center">
-                        <p class="text-muted mb-2">Don't have an account?</p>
-                        <a href="{% url 'register' %}" class="btn btn-outline-primary">
-                            <i class="bi bi-person-plus me-2"></i>Create Account
-                        </a>
+                        <p class="text-muted mb-0">
+                            Accounts are created by the Centre for Human Performance &amp; Health.
+                            Contact your administrator if you need access.
+                        </p>
                     </div>
                 </div>
             </div>

@@ -19,6 +19,7 @@ from .models import (
 )
 from accounts.models import Notification
 from accounts.utils import notify
+from lancer_project.audit import audit
 from .forms import (
     InjuryReportForm, InjuryUpdateForm, InjuryFollowUpForm,
     PlayerProfileForm, TeamRosterForm, InjurySearchForm, EventForm,
@@ -852,6 +853,15 @@ def player_report_injury_submit(request):
         subject=f'[LancersPulse] New self-report: {player_name} — {body_part}',
     )
 
+    audit(
+        'INJURY_SELF_REPORT',
+        actor=request.user,
+        request=request,
+        target_type='InjuryRecord',
+        target_id=injury.pk,
+        is_recurrence=bool(injury.is_recurrence),
+    )
+
     if injury.is_recurrence:
         messages.warning(
             request,
@@ -1030,6 +1040,14 @@ class InjuryCreateView(DoctorRequiredMixin, CreateView):
                 send_email=True,
                 subject='LancersPulse: New injury recorded',
             )
+        audit(
+            'INJURY_CREATE',
+            actor=self.request.user,
+            request=self.request,
+            target_type='InjuryRecord',
+            target_id=injury.pk,
+            subject_id=injury.player_id,
+        )
         messages.success(self.request, 'Injury report created successfully.')
         return response
     
@@ -1101,6 +1119,27 @@ class InjuryUpdateView(DoctorRequiredMixin, UpdateView):
             notify(injury.player,
                    f"Your {injury.body_part.name} injury status changed to {injury.get_status_display()}.",
                    notification_type='INJURY', link=link)
+
+        audit(
+            'INJURY_UPDATE',
+            actor=self.request.user,
+            request=self.request,
+            target_type='InjuryRecord',
+            target_id=injury.pk,
+            subject_id=injury.player_id,
+            status_from=old_status,
+            status_to=injury.status,
+        )
+        if medical_clearance != old_clearance:
+            audit(
+                'MEDICAL_CLEARANCE_CHANGE',
+                actor=self.request.user,
+                request=self.request,
+                target_type='InjuryRecord',
+                target_id=injury.pk,
+                subject_id=injury.player_id,
+                cleared=bool(medical_clearance),
+            )
 
         messages.success(self.request, f'Injury record for {injury.player.get_full_name()} has been updated successfully.')
         if medical_clearance:
@@ -1632,6 +1671,8 @@ def export_injuries_csv(request):
     import csv
     from django.http import HttpResponse
 
+    audit('INJURY_EXPORT', actor=request.user, request=request, format='csv')
+
     if request.user.role not in ['ADMIN', 'DOCTOR', 'COACH']:
         messages.error(request, 'Access denied.')
         return redirect('tracking:injury_list')
@@ -1678,6 +1719,8 @@ def export_injuries_csv(request):
 def export_injuries_pdf(request):
     """Export injury records as a styled PDF using ReportLab (role-scoped)."""
     from django.http import HttpResponse
+
+    audit('INJURY_EXPORT', actor=request.user, request=request, format='pdf')
 
     if request.user.role not in ['ADMIN', 'DOCTOR', 'COACH']:
         messages.error(request, 'Access denied.')
@@ -1815,6 +1858,8 @@ def _build_analytics_queryset(request):
 def analytics_export_pdf(request):
     """Export the analytics summary (filtered) as a PDF report."""
     from django.http import HttpResponse
+
+    audit('ANALYTICS_EXPORT', actor=request.user, request=request, format='pdf')
 
     if request.user.role not in ['ADMIN', 'COACH', 'DOCTOR']:
         messages.error(request, 'Access denied.')

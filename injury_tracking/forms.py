@@ -83,27 +83,44 @@ def _validate_and_resize_photo(image_file):
                 f"Image too large ({w}×{h} px). Maximum is {PHOTO_MAX_PIXELS // (1024 * 1024)} MP."
             )
 
-        # Resize if needed (keeps aspect ratio)
+        # Always re-encode through Pillow, even when no resize is needed.
+        # Two reasons, both from the UWindsor IT review:
+        #   1. It strips EXIF.  A phone photo of an injury carries GPS
+        #      coordinates and a device identifier; neither belongs in an
+        #      athlete's clinical record.
+        #   2. The bytes we store are then bytes Pillow produced, never the
+        #      bytes a client uploaded, so a polyglot file cannot survive to
+        #      be served back from our own origin.
         if max(w, h) > PHOTO_TARGET_MAX_DIM:
             img.thumbnail((PHOTO_TARGET_MAX_DIM, PHOTO_TARGET_MAX_DIM), Image.LANCZOS)
-            output = BytesIO()
-            fmt = img.format or 'JPEG'
-            save_kwargs = {'format': fmt}
-            if fmt == 'JPEG':
-                save_kwargs['quality'] = 88
-                save_kwargs['optimize'] = True
-            img.save(output, **save_kwargs)
-            output.seek(0)
 
-            content_type = f'image/{fmt.lower()}'
-            image_file = InMemoryUploadedFile(
-                output,
-                field_name=image_file.field_name,
-                name=image_file.name,
-                content_type=content_type,
-                size=output.getbuffer().nbytes,
-                charset=None,
-            )
+        fmt = (img.format or 'JPEG').upper()
+        if fmt == 'GIF':
+            # Flatten to PNG: an injury photo needs no animation, and a single
+            # frame is easier to reason about than a multi-frame container.
+            fmt = 'PNG'
+        if fmt == 'JPEG' and img.mode not in ('RGB', 'L'):
+            img = img.convert('RGB')
+
+        output = BytesIO()
+        save_kwargs = {'format': fmt}
+        if fmt == 'JPEG':
+            save_kwargs['quality'] = 88
+            save_kwargs['optimize'] = True
+        # Note: no exif= argument, so metadata is dropped.
+        img.save(output, **save_kwargs)
+        output.seek(0)
+
+        ext_for_fmt = {'JPEG': '.jpg', 'PNG': '.png', 'WEBP': '.webp'}.get(fmt, '.jpg')
+        base = os.path.splitext(os.path.basename(image_file.name))[0]
+        image_file = InMemoryUploadedFile(
+            output,
+            field_name=getattr(image_file, 'field_name', 'photo'),
+            name=f'{base}{ext_for_fmt}',
+            content_type=f'image/{fmt.lower()}',
+            size=output.getbuffer().nbytes,
+            charset=None,
+        )
 
     except forms.ValidationError:
         raise

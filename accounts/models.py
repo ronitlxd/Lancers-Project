@@ -30,6 +30,24 @@ class CustomUser(AbstractUser):
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='PLAYER')
     team = models.ForeignKey(Team, null=True, blank=True, on_delete=models.SET_NULL)
     is_registration_complete = models.BooleanField(default=False)
+
+    # --- Microsoft Entra identity (UWindsor IT review, finding 4) -----------
+    # Both identifiers are stored because IT Services has not yet confirmed
+    # which is authoritative (their response, section 3.3): they expect the
+    # UPN at sign-in but left the object ID open.  Linking prefers entra_oid,
+    # which never changes, and falls back to the UPN, which is rewritten if a
+    # person's UWinID changes.  Holding both means either answer works without
+    # a migration.
+    entra_oid = models.CharField(
+        max_length=64, null=True, blank=True, unique=True, db_index=True,
+        verbose_name='Entra object ID',
+        help_text='Immutable Entra identifier. Populated on first SSO sign-in.',
+    )
+    entra_upn = models.CharField(
+        max_length=255, blank=True, db_index=True,
+        verbose_name='Entra UPN',
+        help_text='User principal name, e.g. uwinid@uwindsor.ca. May change.',
+    )
     
     # Personal Information
     phone = models.CharField(max_length=20, blank=True, help_text="Phone number")
@@ -237,17 +255,6 @@ class TeamPermissionRequest(models.Model):
 
     def __str__(self):
         return f"Req:{self.user.username}->{self.team.name} ({self.role_scope}) [{self.status}]"
-
-class EmailRoleMapping(models.Model):
-    """Model to map email domains or specific emails to roles"""
-    email_pattern = models.CharField(max_length=255, help_text="Email domain (e.g., @lancer.com) or specific email")
-    role = models.CharField(max_length=10, choices=CustomUser.ROLE_CHOICES)
-    team = models.ForeignKey(Team, null=True, blank=True, on_delete=models.SET_NULL, help_text="Auto-assign team (optional)")
-    is_active = models.BooleanField(default=True)
-
-    def __str__(self):
-        return f"{self.email_pattern} -> {self.get_role_display()}"
-
 
 class Notification(models.Model):
     """In-app notification delivered to a single user."""

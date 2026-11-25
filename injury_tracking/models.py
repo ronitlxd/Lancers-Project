@@ -12,6 +12,26 @@ from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 
+import uuid
+from pathlib import Path
+
+
+def injury_photo_path(instance, filename):
+    """Storage path for an injury photograph.
+
+    The uploader's original filename is discarded deliberately.  Django would
+    otherwise keep it, which made photo URLs guessable and could leak the
+    athlete in the path itself (``smith-knee-acl.jpg``).  A random UUID removes
+    both problems.  (UWindsor IT review, finding 1.)
+
+    Unguessable names are defence in depth, not the access control: every read
+    still goes through accounts.views.serve_injury_photo.
+    """
+    ext = Path(filename).suffix.lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.webp'):
+        ext = '.jpg'
+    return f'injury_photos/{uuid.uuid4().hex}{ext}'
+
 User = get_user_model()
 
 
@@ -189,7 +209,7 @@ class InjuryRecord(models.Model):
     )
 
     photo = models.ImageField(
-        upload_to='injury_photos/',
+        upload_to=injury_photo_path,
         null=True,
         blank=True,
         help_text="Optional photo of the injury, uploaded by the player.",
@@ -258,6 +278,15 @@ class InjuryRecord(models.Model):
         default=False,
         help_text="True if reported directly by the player (pending therapist review).",
     )
+
+    # --- Retention (UWindsor IT review, finding 5) -------------------------
+    # Set when the record has been anonymised: personal detail stripped, the
+    # athlete replaced by a per-team placeholder, photo deleted.  The analytic
+    # dimensions (team, body part, injury type, severity, dates, contact type,
+    # missed games, season) are deliberately preserved so the year-over-year
+    # trend reporting this system exists for keeps working.
+    anonymised_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -457,3 +486,60 @@ class InjuryAnalytics(models.Model):
 
     def __str__(self):
         return f"{self.team.name} - {self.season_year} Analytics"
+
+
+class PurgeLedgerEntry(models.Model):
+    """A durable record of one retention action.
+
+    Why this exists: IT Services confirmed that application deletions are NOT
+    propagated to backups and "may need to be reapplied after a restore"
+    (their response, section 1.8).
+
+    Note the limit of a database-resident ledger.  Restoring a backup taken
+    BEFORE a purge also rolls back the ledger rows describing that purge, so
+    the ledger cannot by itself rescue that case.  Two things cover it:
+
+    1.  Retention-driven purges are deterministic.  Re-running
+        `purge_expired_data` after a restore re-applies them from the rules.
+    2.  Actions taken OUTSIDE the retention rules (an erasure request, an
+        early deletion by CHPH) are not reproducible from the rules, so every
+        entry is also emitted to the audit log, which leaves the database and
+        is retained by the platform.  `replay_purge_ledger --from-file` takes
+        an export of those entries and re-applies them.
+    """
+
+    ACTION_ANONYMISE = 'ANONYMISE'
+    ACTION_PHOTO_DELETE = 'PHOTO_DELETE'
+    ACTION_FILE_DELETE = 'FILE_DELETE'
+    ACTION_CHOICES = [
+        (ACTION_ANONYMISE, 'Record anonymised'),
+        (ACTION_PHOTO_DELETE, 'Photo deleted'),
+        (ACTION_FILE_DELETE, 'Orphaned file deleted'),
+    ]
+
+    target_type = models.CharField(max_length=64)
+    target_id = models.CharField(
+        max_length=255,
+        help_text='Primary key, or a file path for FILE_DELETE.',
+    )
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    reason = models.CharField(max_length=200, blank=True)
+    performed_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    performed_by = models.CharField(
+        max_length=150, blank=True,
+        help_text='Username, or "system" for a scheduled run.',
+    )
+
+    class Meta:
+        verbose_name_plural = 'Purge ledger entries'
+        ordering = ['-performed_at']
+        indexes = [models.Index(fields=['target_type', 'target_id'])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['target_type', 'target_id', 'action'],
+                name='unique_purge_action_per_target',
+            )
+        ]
+
+    def __str__(self):
+        return f'{self.action} {self.target_type}#{self.target_id}'

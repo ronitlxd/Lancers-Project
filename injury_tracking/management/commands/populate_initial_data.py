@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
-from accounts.models import Team, EmailRoleMapping
+from accounts.models import Team
 from injury_tracking.models import (
     InjuryType, BodyPart, InjurySeverity
 )
@@ -131,22 +131,6 @@ class Command(BaseCommand):
             )
             if created:
                 self.stdout.write(f'Created severity level: {severity["name"]}')
-
-        # Create email role mappings
-        email_mappings = [
-            {'email_pattern': '@lancer.com', 'role': 'PLAYER'},
-            {'email_pattern': '@lancer.coach.com', 'role': 'COACH'},
-            {'email_pattern': '@lancer.medical.com', 'role': 'DOCTOR'},
-            {'email_pattern': '@lancer.admin.com', 'role': 'ADMIN'},
-        ]
-        
-        for mapping in email_mappings:
-            obj, created = EmailRoleMapping.objects.get_or_create(
-                email_pattern=mapping['email_pattern'],
-                defaults={'role': mapping['role'], 'is_active': True}
-            )
-            if created:
-                self.stdout.write(f'Created email mapping: {mapping["email_pattern"]} -> {mapping["role"]}')
 
         # Create admin user if it doesn't exist
         if not User.objects.filter(username='admin').exists():

@@ -1,0 +1,108 @@
+# LancersPulse - staging deployment for University of Windsor Kubernetes.
+#
+# Written against the IT Services deployment review response (Nov 2026) and
+# Appendix A. IT Services owns hosting, the platform and backups; this file is
+# the application team's statement of what the workload needs.
+#
+# IMPORTANT, replicas must stay at 1. The database is SQLite on a ReadWriteOnce
+# volume (IT response, section 1.5). A second pod would contend for the same
+# file, and a RollingUpdate would try to start one before the old pod released
+# the volume, which is why the strategy below is Recreate.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: hk-mac-injury-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hk-mac-injury
+  labels:
+    app: hk-mac-injury
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hk-mac-injury
+  template:
+    metadata:
+      labels:
+        app: hk-mac-injury
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        # fsGroup makes the mounted volume writable by the non-root user.
+        # Without it the MEDIA_ROOT start-up check fails the pod immediately,
+        # which is the intended behaviour but not the intended outcome.
+        fsGroup: 10001
+      containers:
+        - name: web
+          image: hk-mac-injury:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            # Provisioned by IT Services: ENTRA_TENANT_ID, ENTRA_CLIENT_ID,
+            # ENTRA_CLIENT_SECRET. Also expected to carry SECRET_KEY.
+            - secretRef:
+                name: hk-mac-injury-entra-creds
+          env:
+            - name: DEBUG
+              value: "False"
+            - name: BEHIND_PROXY
+              value: "True"
+            - name: ALLOWED_HOSTS
+              value: "hk-mac-injury.appsdev.uwindsor.ca"
+            # Both of these must live on the persistent volume. The SQLite file
+            # and its write-ahead log are what IT Services backs up; uploaded
+            # injury photos would otherwise vanish on every pod restart.
+            - name: DB_PATH
+              value: /data/db.sqlite3
+            - name: MEDIA_ROOT
+              value: /data/media
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hk-mac-injury-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hk-mac-injury
+spec:
+  selector:
+    app: hk-mac-injury
+  ports:
+    - port: 80
+      targetPort: 8080

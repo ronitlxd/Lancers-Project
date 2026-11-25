@@ -1,73 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm
-from .models import CustomUser, PlayerProfile, CoachProfile, DoctorProfile, Team, EmailRoleMapping, TeamPermissionRequest
-
-class BasicRegistrationForm(UserCreationForm):
-    first_name = forms.CharField(max_length=30, required=True)
-    last_name = forms.CharField(max_length=30, required=True)
-    email = forms.EmailField(required=True)
-    
-    class Meta:
-        model = CustomUser
-        fields = ('username', 'first_name', 'last_name', 'email', 'password1', 'password2')
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields['username'].widget.attrs.update({'class': 'form-control'})
-        self.fields['first_name'].widget.attrs.update({'class': 'form-control'})
-        self.fields['last_name'].widget.attrs.update({'class': 'form-control'})
-        self.fields['email'].widget.attrs.update({'class': 'form-control'})
-        self.fields['password1'].widget.attrs.update({'class': 'form-control'})
-        self.fields['password2'].widget.attrs.update({'class': 'form-control'})
-    
-    def clean_email(self):
-        email = self.cleaned_data.get('email')
-        # Check if email is already registered
-        if CustomUser.objects.filter(email=email).exists():
-            raise forms.ValidationError("An account with this email already exists.")
-        return email
-    
-    def save(self, commit=True):
-        user = super().save(commit=False)
-        user.email = self.cleaned_data['email']
-        user.first_name = self.cleaned_data['first_name']
-        user.last_name = self.cleaned_data['last_name']
-        
-        # Auto-assign role based on email
-        role, team = self.get_role_from_email(user.email)
-        user.role = role
-        user.team = team
-        user.is_registration_complete = False
-        
-        if commit:
-            user.save()
-        return user
-    
-    def get_role_from_email(self, email):
-        """Determine role and team based on email"""
-        # Check for specific email mappings first
-        mappings = EmailRoleMapping.objects.filter(is_active=True)
-        
-        for mapping in mappings:
-            if mapping.email_pattern.startswith('@'):
-                # Domain matching
-                if email.endswith(mapping.email_pattern):
-                    return mapping.role, mapping.team
-            else:
-                # Exact email matching
-                if email.lower() == mapping.email_pattern.lower():
-                    return mapping.role, mapping.team
-        
-        # Default role assignment based on email domain (UWin Windsor mapping)
-        if email.endswith('@athlete.uwindsor.ca'):
-            return 'PLAYER', None
-        elif email.endswith('@coach.uwindsor.ca'):
-            return 'COACH', None
-        elif email.endswith('@doctor.uwindsor.ca'):
-            return 'DOCTOR', None
-        else:
-            # Default to player for unknown domains
-            return 'PLAYER', None
+from .models import CustomUser, PlayerProfile, CoachProfile, DoctorProfile, Team, TeamPermissionRequest
 
 class PlayerProfileForm(forms.ModelForm):
     class Meta:
@@ -165,64 +97,10 @@ class PlayerProfileForm(forms.ModelForm):
             raise forms.ValidationError("Year of study must be between 1 and 10.")
         return year
 
-class PlayerRegisterStep1Form(forms.Form):
-    """Step 1 of player registration: name, UWindsor email, student ID, photo, password."""
-    first_name = forms.CharField(
-        max_length=30, required=True, label="Preferred First Name",
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
-    )
-    last_name = forms.CharField(
-        max_length=30, required=True, label="Preferred Last Name",
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
-    )
-    email = forms.EmailField(
-        required=True, label="UWindsor Email",
-        widget=forms.EmailInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'you@uwindsor.ca',
-        }),
-        help_text="Must end with @uwindsor.ca (or @athlete/@coach/@doctor.uwindsor.ca).",
-    )
-    student_id = forms.CharField(
-        max_length=20, required=True, label="Student ID",
-        widget=forms.TextInput(attrs={'class': 'form-control'}),
-    )
-    phone = forms.CharField(
-        max_length=20, required=False, label="Phone Number",
-        widget=forms.TextInput(attrs={
-            'class': 'form-control', 'type': 'tel',
-            'placeholder': 'e.g. 519-555-0123',
-        }),
-    )
-    profile_picture = forms.ImageField(
-        required=False, label="Profile Photo",
-        widget=forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
-        help_text="Optional. A default avatar is used if blank.",
-    )
-    password1 = forms.CharField(
-        required=True, label="Password",
-        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
-        min_length=8,
-    )
-    password2 = forms.CharField(
-        required=True, label="Confirm Password",
-        widget=forms.PasswordInput(attrs={'class': 'form-control'}),
-    )
-
-    def clean_email(self):
-        email = (self.cleaned_data.get('email') or '').strip().lower()
-        if not email.endswith('.uwindsor.ca') and not email.endswith('@uwindsor.ca'):
-            raise forms.ValidationError("Use your UWindsor email address (ends with @uwindsor.ca).")
-        if CustomUser.objects.filter(email__iexact=email).exists():
-            raise forms.ValidationError("An account with this email already exists.")
-        return email
-
-    def clean(self):
-        cleaned = super().clean()
-        p1, p2 = cleaned.get('password1'), cleaned.get('password2')
-        if p1 and p2 and p1 != p2:
-            self.add_error('password2', "Passwords do not match.")
-        return cleaned
+class _TeamChoiceField(forms.ModelChoiceField):
+    """Team selector that shows only the team name, without the gender suffix."""
+    def label_from_instance(self, obj):
+        return obj.name
 
 
 SPORT_CHOICES = [
@@ -237,6 +115,7 @@ SPORT_CHOICES = [
     ('Other', 'Other'),
 ]
 
+
 YEAR_OF_ELIGIBILITY_CHOICES = [
     ('', 'Select year'),
     (1, '1st year'),
@@ -245,12 +124,6 @@ YEAR_OF_ELIGIBILITY_CHOICES = [
     (4, '4th year'),
     (5, '5th year'),
 ]
-
-
-class _TeamChoiceField(forms.ModelChoiceField):
-    """Team selector that shows only the team name, without the gender suffix."""
-    def label_from_instance(self, obj):
-        return obj.name
 
 
 class PlayerRegisterStep2Form(forms.ModelForm):

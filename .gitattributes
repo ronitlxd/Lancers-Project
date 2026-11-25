@@ -1,0 +1,17 @@
+# Normalise line endings in the repository.
+# The working tree was checked out on Windows with core.autocrlf, so several
+# templates are CRLF on disk while the repository stores LF. Without this file
+# a commit made from a Linux checkout rewrites every line of those files.
+* text=auto
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.docx binary
+*.xlsx binary
+*.woff binary
+*.woff2 binary
+*.ttf  binary

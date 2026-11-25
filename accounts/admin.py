@@ -69,7 +69,7 @@ class TeamPermissionRequestAdmin(admin.ModelAdmin):
     deny_requests.short_description = 'Deny selected requests'
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Team, PlayerProfile, CoachProfile, DoctorProfile, EmailRoleMapping
+from .models import CustomUser, Team, PlayerProfile, CoachProfile, DoctorProfile
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -112,9 +112,3 @@ class CoachProfileAdmin(admin.ModelAdmin):
 class DoctorProfileAdmin(admin.ModelAdmin):
     list_display = ['user', 'medical_license', 'specialization', 'years_experience']
     search_fields = ['user__username', 'user__first_name', 'user__last_name']
-
-@admin.register(EmailRoleMapping)
-class EmailRoleMappingAdmin(admin.ModelAdmin):
-    list_display = ['email_pattern', 'role', 'team', 'is_active']
-    list_filter = ['role', 'team', 'is_active']
-    search_fields = ['email_pattern']

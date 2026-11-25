@@ -100,8 +100,8 @@
               {% endif %}
               {% if injury.photo %}
                 <p><strong>Photo:</strong><br>
-                  <a href="{{ injury.photo.url }}" target="_blank">
-                    <img src="{{ injury.photo.url }}" alt="Injury photo" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid #e2e8f0;">
+                  <a href="{% url 'serve_injury_photo' injury.pk %}" target="_blank">
+                    <img src="{% url 'serve_injury_photo' injury.pk %}" alt="Injury photo" style="max-width:160px;max-height:160px;border-radius:8px;border:1px solid #e2e8f0;">
                   </a>
                 </p>
               {% endif %}
